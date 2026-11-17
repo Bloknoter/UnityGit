@@ -163,6 +163,78 @@ namespace UnityGit
             }
         });
 
+        public Task<ActionOutcome> PushAsync() => RunAsync(GitAction.Push, true, async (ct, progress) =>
+        {
+            const GitAction push = GitAction.Push;
+            var repo = _repo ?? throw new InvalidOperationException("Push ran without an open repository.");
+            PushResult result;
+            Hooks.BeginGitOperation();
+            try
+            {
+                result = await repo.PushAsync(null, progress, ct);
+            }
+            finally
+            {
+                Hooks.EndGitOperation();
+                await RefreshAfterActionAsync();
+            }
+
+            switch (result.Status)
+            {
+                case PushStatus.Pushed:
+                    return new ActionOutcome(push, OutcomeKind.Succeeded, $"Pushed to {Snapshot.Upstream}");
+                case PushStatus.UpToDate:
+                    return new ActionOutcome(push, OutcomeKind.Succeeded, "Already up to date");
+                case PushStatus.Rejected:
+                    return new ActionOutcome(push, OutcomeKind.Failed, "Push rejected: someone pushed first — pull, then push");
+                default:
+                    return result.Error != null
+                        ? OutcomeMessages.FromError(push, result.Error)
+                        : new ActionOutcome(push, OutcomeKind.Failed, result.Message);
+            }
+        });
+
+        public Task<ActionOutcome> FetchAsync() => RunAsync(GitAction.Fetch, true, async (ct, progress) =>
+        {
+            const GitAction fetch = GitAction.Fetch;
+            var repo = _repo ?? throw new InvalidOperationException("Fetch ran without an open repository.");
+            FetchResult result;
+            Hooks.BeginGitOperation();
+            try
+            {
+                result = await repo.FetchAsync(null, progress, ct);
+            }
+            finally
+            {
+                Hooks.EndGitOperation();
+                await RefreshAfterActionAsync();
+            }
+
+            if (result.Status == FetchStatus.Succeeded)
+                return new ActionOutcome(fetch, OutcomeKind.Succeeded, "Fetch complete");
+            return result.Error != null
+                ? OutcomeMessages.FromError(fetch, result.Error)
+                : new ActionOutcome(fetch, OutcomeKind.Failed, result.Message);
+        });
+
+        public Task<ActionOutcome> SetUpLfsAsync() => RunAsync(GitAction.SetUpLfs, false, async (_, _) =>
+        {
+            var repo = _repo ?? throw new InvalidOperationException("LFS setup ran without an open repository.");
+            bool installed;
+            Hooks.BeginGitOperation();
+            try
+            {
+                installed = await repo.Lfs.EnsureInstalledAsync();
+            }
+            finally
+            {
+                Hooks.EndGitOperation();
+                await RefreshAfterActionAsync();
+            }
+            return new ActionOutcome(GitAction.SetUpLfs, OutcomeKind.Succeeded,
+                installed ? "LFS set up for this repository" : "LFS was already set up");
+        });
+
         public void Cancel()
         {
             CancellationTokenSource? run;
