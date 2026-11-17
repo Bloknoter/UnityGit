@@ -194,14 +194,16 @@ namespace UnityGit
                 return new ActionOutcome(pull, OutcomeKind.Cancelled, "Pull cancelled — modified scenes weren't saved");
 
             var repo = _repo ?? throw new InvalidOperationException("Pull ran without an open repository.");
+            var files = new FileChangeTracker();
             var result = await RunGitOperationAsync(async () =>
-                {
-                    var mode = PullModeResolver.Resolve(
-                        await repo.Config.GetAsync("pull.rebase", null, ct),
-                        await repo.Config.GetAsync("pull.ff", null, ct));
-                    return await repo.PullAsync(new PullOptions { Mode = mode }, progress, ct);
-                },
-                r => r.Status is PullStatus.FastForwarded or PullStatus.Merged or PullStatus.Rebased or PullStatus.Conflicts);
+            {
+                var mode = PullModeResolver.Resolve(
+                    await repo.Config.GetAsync("pull.rebase", null, ct),
+                    await repo.Config.GetAsync("pull.ff", null, ct));
+                return await files.TrackAsync(() => repo.PullAsync(new PullOptions { Mode = mode }, progress, ct),
+                    r => r.Status is PullStatus.UpToDate or PullStatus.NoUpstream or PullStatus.CannotFastForward
+                        or PullStatus.LocalChangesWouldBeOverwritten);
+            }, files);
 
             switch (result.Status)
             {
@@ -240,8 +242,11 @@ namespace UnityGit
                 return new ActionOutcome(GitAction.Switch, OutcomeKind.Cancelled, "Switch cancelled — modified scenes weren't saved");
 
             var repo = _repo ?? throw new InvalidOperationException("Switch ran without an open repository.");
-            var result = await RunGitOperationAsync(() => repo.Branches.SwitchAsync(branch, null, progress, ct),
-                r => r.Status == SwitchStatus.Switched);
+            var files = new FileChangeTracker();
+            var result = await RunGitOperationAsync(
+                () => files.TrackAsync(() => repo.Branches.SwitchAsync(branch, null, progress, ct),
+                    r => r.Status is SwitchStatus.LocalChangesWouldBeOverwritten or SwitchStatus.NotFound or SwitchStatus.AlreadyExists),
+                files);
 
             switch (result.Status)
             {
@@ -345,28 +350,21 @@ namespace UnityGit
         }
 
         // Runs an action's git work between Hooks.BeginGitOperation() and Hooks.EndGitOperation(), then refreshes the
-        // snapshot (also when the work throws). When refreshAssetsWhen accepts the result, Unity reimports the files
-        // git changed: Hooks.RefreshAssets() runs after End, once the lock is released, and before the snapshot refresh.
-        // Bodies build their outcome from the returned result, so it can read the refreshed snapshot.
-        async Task<T> RunGitOperationAsync<T>(Func<Task<T>> work, Func<T, bool>? refreshAssetsWhen = null)
+        // snapshot (also when the work throws). Pull and Switch pass the tracker their git call ran through: when it says
+        // files may have changed, Unity reimports them (Hooks.RefreshAssets()) after End, once the lock is released, and
+        // before the snapshot refresh. Bodies build their outcome from the returned result, so it can read the refreshed
+        // snapshot.
+        async Task<T> RunGitOperationAsync<T>(Func<Task<T>> work, FileChangeTracker? files = null)
         {
             Hooks.BeginGitOperation();
             try
             {
-                T result;
-                try
-                {
-                    result = await work();
-                }
-                finally
-                {
-                    Hooks.EndGitOperation();
-                }
-                if (refreshAssetsWhen != null && refreshAssetsWhen(result)) Hooks.RefreshAssets();
-                return result;
+                return await work();
             }
             finally
             {
+                Hooks.EndGitOperation();
+                if (files != null && files.MayHaveChanged) Hooks.RefreshAssets();
                 await RefreshAfterActionAsync();
             }
         }
@@ -500,6 +498,22 @@ namespace UnityGit
         }
 
         public void Dispose() => _cts.Cancel();
+
+        // Pull and Switch rewrite files under the running editor. Their git call runs through TrackAsync: once the call
+        // has started, the files count as possibly changed, also when it throws or is cancelled midway, unless its result
+        // shows that git left them alone.
+        sealed class FileChangeTracker
+        {
+            public bool MayHaveChanged { get; private set; }
+
+            public async Task<T> TrackAsync<T>(Func<Task<T>> gitCall, Func<T, bool> leftFilesUntouched)
+            {
+                MayHaveChanged = true;
+                var result = await gitCall();
+                MayHaveChanged = !leftFilesUntouched(result);
+                return result;
+            }
+        }
 
         sealed class ProgressReporter : IProgress<GitProgress>
         {

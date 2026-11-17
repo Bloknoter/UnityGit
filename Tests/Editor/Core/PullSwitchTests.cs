@@ -15,6 +15,12 @@ namespace UnityGit.Tests
         [TestCase(null, "only", PullMode.FastForwardOnly)]
         [TestCase(null, null, PullMode.Merge)]
         [TestCase("false", null, PullMode.Merge)]
+        [TestCase("yes", null, PullMode.Rebase)]
+        [TestCase("on", null, PullMode.Rebase)]
+        [TestCase("1", null, PullMode.Rebase)]
+        [TestCase(" Yes ", null, PullMode.Rebase)]
+        [TestCase("no", "only", PullMode.FastForwardOnly)]
+        [TestCase("0", null, PullMode.Merge)]
         public void Resolve(string? rebase, string? ff, PullMode expected)
             => Assert.That(PullModeResolver.Resolve(rebase, ff), Is.EqualTo(expected));
     }
@@ -39,6 +45,12 @@ namespace UnityGit.Tests
         {
             await GitSandbox.CommitFileAsync(trio.Teammate, path, content, "teammate work");
             GitSandbox.EnsurePushed(await trio.Teammate.PushAsync());
+        }
+
+        static GitResult Ok(GitResult r)
+        {
+            Assert.That(r.Succeeded, Is.True, $"{r.CommandLine} failed with exit code {r.ExitCode}: {r.StandardError}");
+            return r;
         }
 
         static async Task SwitchCreate(GitRepository repo, string branch)
@@ -143,6 +155,36 @@ namespace UnityGit.Tests
 
             Assert.That(outcome.Kind, Is.EqualTo(OutcomeKind.Cancelled));
             Assert.That(outcome.Message, Is.EqualTo("Pull cancelled"));
+            Assert.That(hooks.Count("RefreshAssets"), Is.EqualTo(0));
+        }
+
+        // The pull starts, then git fails at the unreachable remote: its result doesn't prove the files are untouched.
+        [Test] public async Task Pull_GitFailsMidway_StillRefreshesAssets()
+        {
+            var (trio, s, hooks) = await CreateAsync();
+            Ok(await trio.Local.RunRawAsync("remote", "set-url", "origin", Path.Combine(_sb.Root, "nope.git")));
+            await s.RefreshAsync();
+
+            var outcome = await s.PullAsync();
+
+            Assert.That(outcome.Kind, Is.EqualTo(OutcomeKind.Failed), outcome.Message);
+            Assert.That(hooks.Calls, Is.EqualTo(new[] { "SaveAssets", "ConfirmScenes", "Begin", "End", "RefreshAssets" }));
+        }
+
+        // Switch has no reads before its git call, so a cancel during Begin is thrown by the git call itself.
+        [Test] public async Task Switch_CancelledOnceGitCallStarted_StillRefreshesAssets()
+        {
+            var (trio, s, hooks) = await CreateAsync();
+            await trio.Local.Branches.CreateAsync("feature");
+            hooks.OnBeginGitOperation = () => s.Cancel();
+            await s.RefreshAsync();
+
+            var outcome = await s.SwitchBranchAsync("feature");
+
+            Assert.That(outcome.Kind, Is.EqualTo(OutcomeKind.Cancelled));
+            Assert.That(outcome.Message, Is.EqualTo("Switch cancelled"));
+            Assert.That(hooks.Calls, Is.EqualTo(new[] { "SaveAssets", "ConfirmScenes", "Begin", "End", "RefreshAssets" }));
+            Assert.That(s.Snapshot.Branch, Is.EqualTo("main"));
         }
 
         [Test] public async Task Switch_ToLocalBranch()
@@ -177,7 +219,7 @@ namespace UnityGit.Tests
 
         [Test] public async Task Switch_BlockedByLocalChanges_KeepsFile()
         {
-            var (trio, s, _) = await CreateAsync();
+            var (trio, s, hooks) = await CreateAsync();
             await SwitchCreate(trio.Local, "feature");
             await GitSandbox.CommitFileAsync(trio.Local, "README.md", "feature line\n", "feature edit");
             var back = await trio.Local.Branches.SwitchAsync("main");
@@ -191,6 +233,7 @@ namespace UnityGit.Tests
             Assert.That(outcome.Message, Is.EqualTo("Switch blocked: your local changes would be overwritten — commit or stash them first"));
             Assert.That(File.ReadAllText(Path.Combine(trio.Local.WorkingDirectory, "README.md")), Is.EqualTo("mine"));
             Assert.That(s.Snapshot.Branch, Is.EqualTo("main"));
+            Assert.That(hooks.Count("RefreshAssets"), Is.EqualTo(0));
         }
     }
 }
