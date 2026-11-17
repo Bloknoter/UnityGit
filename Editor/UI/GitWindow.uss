@@ -1,0 +1,83 @@
+/* UnityGit window. Colours are Unity's theme variables or translucent tints, so both editor skins work. */
+
+.unitygit-window {
+    flex-grow: 1;
+}
+
+#unitygit-toolbar {
+    flex-shrink: 0;
+}
+
+.unitygit-toolbar-spacer {
+    flex-grow: 1;
+}
+
+#unitygit-progress {
+    -unity-text-align: middle-left;
+    padding: 0 6px;
+}
+
+.unitygit-outcome-bar {
+    flex-direction: row;
+    flex-shrink: 0;
+    align-items: flex-start;
+    padding: 4px 4px 4px 8px;
+    border-left-width: 3px;
+    border-bottom-width: 1px;
+    border-bottom-color: var(--unity-colors-default-border);
+}
+
+.unitygit-outcome-bar.success {
+    background-color: rgba(76, 175, 80, 0.15);
+    border-left-color: rgb(76, 175, 80);
+}
+
+.unitygit-outcome-bar.failure {
+    background-color: rgba(229, 72, 60, 0.15);
+    border-left-color: rgb(229, 72, 60);
+}
+
+.unitygit-outcome-content {
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+#unitygit-outcome {
+    white-space: normal;
+    padding-top: 2px;
+}
+
+#unitygit-outcome-dismiss {
+    flex-shrink: 0;
+}
+
+.unitygit-body {
+    flex-grow: 1;
+}
+
+.unitygit-message {
+    align-items: flex-start;
+    padding: 12px;
+}
+
+.unitygit-message > Label {
+    white-space: normal;
+    margin-bottom: 8px;
+}
+
+.unitygit-split {
+    flex-grow: 1;
+    flex-direction: row;
+}
+
+#unitygit-nav {
+    width: 140px;
+    flex-shrink: 0;
+    border-right-width: 1px;
+    border-right-color: var(--unity-colors-default-border);
+}
+
+#unitygit-panel {
+    flex-grow: 1;
+    flex-shrink: 1;
+}
