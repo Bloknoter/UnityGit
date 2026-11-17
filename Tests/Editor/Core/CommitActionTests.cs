@@ -43,6 +43,20 @@ namespace UnityGit.Tests
             return trio.Local;
         }
 
+        // A repo whose initial commit holds Assets/Old.asset (+ .meta), both then renamed to Assets/New.asset with git mv.
+        async Task<GitRepository> StagedRenameRepoAsync()
+        {
+            var repo = await _sb.InitRepoAsync("p");
+            GitSandbox.WriteFile(repo, "Assets/Old.asset", "asset content\n");
+            GitSandbox.WriteFile(repo, "Assets/Old.asset.meta", "guid: 1\n");
+            await repo.Index.StageAsync(new[] { "Assets/Old.asset", "Assets/Old.asset.meta" });
+            var initial = await repo.CommitAsync("initial");
+            Assert.That(initial.Succeeded, Is.True, initial.Message);
+            Ok(await repo.RunRawAsync("mv", "Assets/Old.asset", "Assets/New.asset"));
+            Ok(await repo.RunRawAsync("mv", "Assets/Old.asset.meta", "Assets/New.asset.meta"));
+            return repo;
+        }
+
         static string[] Rows(GitSession s) => s.Snapshot.Changes.Select(c => c.Path).ToArray();
 
         static Task<string?> Head(GitRepository repo) => repo.ResolveRevisionAsync("HEAD");
@@ -57,6 +71,16 @@ namespace UnityGit.Tests
         {
             var r = Ok(await repo.RunRawAsync("show", "--name-only", "--format=", "HEAD"));
             return r.StandardOutput.Split('\n').Select(l => l.TrimEnd('\r')).Where(l => l.Length > 0).ToArray();
+        }
+
+        // HEAD's changes as "D path" or, for renames, "R old -> new".
+        static async Task<string[]> HeadNameStatus(GitRepository repo)
+        {
+            var r = Ok(await repo.RunRawAsync("show", "--name-status", "--format=", "-M", "HEAD"));
+            return r.StandardOutput.Split('\n').Select(l => l.TrimEnd('\r')).Where(l => l.Length > 0)
+                .Select(l => l.Split('\t'))
+                .Select(f => f.Length == 3 ? $"{f[0][0]} {f[1]} -> {f[2]}" : $"{f[0][0]} {f[1]}")
+                .ToArray();
         }
 
         [Test] public async Task Commit_OnlyTickedRows()
@@ -97,14 +121,7 @@ namespace UnityGit.Tests
 
         [Test] public async Task Commit_StagedRename_IsCommitted()
         {
-            var repo = await _sb.InitRepoAsync("p");
-            GitSandbox.WriteFile(repo, "Assets/Old.asset", "asset content\n");
-            GitSandbox.WriteFile(repo, "Assets/Old.asset.meta", "guid: 1\n");
-            await repo.Index.StageAsync(new[] { "Assets/Old.asset", "Assets/Old.asset.meta" });
-            var initial = await repo.CommitAsync("initial");
-            Assert.That(initial.Succeeded, Is.True, initial.Message);
-            Ok(await repo.RunRawAsync("mv", "Assets/Old.asset", "Assets/New.asset"));
-            Ok(await repo.RunRawAsync("mv", "Assets/Old.asset.meta", "Assets/New.asset.meta"));
+            var repo = await StagedRenameRepoAsync();
             var s = _sb.CreateSession(repo.WorkingDirectory, new FakeEditorHooks());
             await s.RefreshAsync();
             Assert.That(Rows(s), Is.EqualTo(new[] { "Assets/New.asset" }));
@@ -112,15 +129,42 @@ namespace UnityGit.Tests
 
             var o = await s.CommitAsync("rename", Rows(s), Rows(s));
             Assert.That(o.Kind, Is.EqualTo(OutcomeKind.Succeeded), o.Message);
-            var show = Ok(await repo.RunRawAsync("show", "--name-status", "--format=", "-M", "HEAD"));
-            var renames = show.StandardOutput.Split('\n').Select(l => l.TrimEnd('\r')).Where(l => l.Length > 0)
-                .Select(l => l.Split('\t')).Select(f => $"{f[0][0]} {f[1]} -> {f[f.Length - 1]}");
-            Assert.That(renames, Is.EquivalentTo(new[]
+            Assert.That(await HeadNameStatus(repo), Is.EquivalentTo(new[]
             {
                 "R Assets/Old.asset -> Assets/New.asset",
                 "R Assets/Old.asset.meta -> Assets/New.asset.meta",
             }));
             Assert.That(s.Snapshot.Changes, Is.Empty);
+        }
+
+        [Test] public async Task Commit_StagedRenameThenNewPathDeleted_CommitsDeletion()
+        {
+            var repo = await StagedRenameRepoAsync();
+            File.Delete(Path.Combine(repo.WorkingDirectory, "Assets/New.asset"));
+            File.Delete(Path.Combine(repo.WorkingDirectory, "Assets/New.asset.meta"));
+            var s = _sb.CreateSession(repo.WorkingDirectory, new FakeEditorHooks());
+            await s.RefreshAsync();
+            Assert.That(Rows(s), Is.EqualTo(new[] { "Assets/New.asset" }));
+
+            var o = await s.CommitAsync("delete", Rows(s), Rows(s));
+            Assert.That(o.Kind, Is.EqualTo(OutcomeKind.Succeeded), o.Message);
+            Assert.That(await HeadNameStatus(repo), Is.EquivalentTo(new[] { "D Assets/Old.asset", "D Assets/Old.asset.meta" }));
+            Assert.That(s.Snapshot.Changes, Is.Empty);
+        }
+
+        [Test] public async Task Commit_StagedNewFileThenDeleted_DoesNotFail()
+        {
+            var (repo, s, _) = await CreateAsync();
+            GitSandbox.WriteFile(repo, "x.txt", "x");
+            await repo.Index.StageAsync(new[] { "x.txt" });
+            File.Delete(Path.Combine(repo.WorkingDirectory, "x.txt"));
+            GitSandbox.WriteFile(repo, "a.txt", "a");
+            await s.RefreshAsync();
+            Assert.That(Rows(s), Is.EqualTo(new[] { "a.txt", "x.txt" }));
+
+            var o = await s.CommitAsync("add a", Rows(s), Rows(s));
+            Assert.That(o.Kind, Is.EqualTo(OutcomeKind.Succeeded), o.Message);
+            Assert.That(await HeadFiles(repo), Is.EquivalentTo(new[] { "a.txt" }));
         }
 
         [Test] public async Task Commit_CallsSaveThenConfirmThenBeginEnd()
