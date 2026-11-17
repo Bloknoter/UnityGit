@@ -90,7 +90,7 @@ namespace UnityGit
                 _repo = await GitRepository.OpenAsync(ProjectPath, _options, ct).ConfigureAwait(false);
             }
 
-            return await SnapshotLoader.LoadAsync(_repo, ProjectPath, includeLfsLocks, ct).ConfigureAwait(false);
+            return await SnapshotLoader.LoadAsync(_repo, ProjectPath, includeLfsLocks, ct, msg => Log?.Invoke(msg)).ConfigureAwait(false);
         }
 
         void Raise(Action action)
