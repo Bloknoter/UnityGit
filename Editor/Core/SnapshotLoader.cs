@@ -30,7 +30,7 @@ namespace UnityGit
                 Ahead = status.Ahead,
                 Behind = status.Behind,
                 Operation = ToOperation(repo.GetState()),
-                Changes = MetaPairing.Group(status.Entries.Where(e => !e.IsIgnored).Select(ToFileChange).ToList()),
+                Changes = ToChanges(status),
             };
             await LoadDetailsAsync(snapshot, repo, status.IsUnborn, includeLfsLocks, log, ct).ConfigureAwait(false);
             return snapshot;
@@ -110,6 +110,10 @@ namespace UnityGit
                 LastCommitSubject = b.LastCommitSubject,
             };
         }
+
+        /// <summary>The Changes rows for a status. Commit reloads its rows through this too, so both see the same list.</summary>
+        internal static IReadOnlyList<ChangeItem> ToChanges(RepositoryStatus status)
+            => MetaPairing.Group(status.Entries.Where(e => !e.IsIgnored).Select(ToFileChange).ToList());
 
         internal static FileChange ToFileChange(StatusEntry entry)
         {

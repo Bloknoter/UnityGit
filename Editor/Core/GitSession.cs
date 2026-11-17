@@ -1,6 +1,8 @@
 #nullable enable
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using FlexGit;
@@ -90,6 +92,68 @@ namespace UnityGit
                 kept ? "Repository created — existing .gitignore kept" : "Repository created with a Unity .gitignore");
         });
 
+        /// <summary>
+        /// Commits exactly the selected rows. Rows are <see cref="ChangeItem.Path"/> values: <paramref name="shownRows"/>
+        /// is the list the user saw, so files that saving revealed stop the commit instead of slipping in unseen.
+        /// </summary>
+        public Task<ActionOutcome> CommitAsync(string message, IReadOnlyCollection<string> selectedRows, IReadOnlyCollection<string> shownRows)
+            => RunAsync(GitAction.Commit, false, async (_, _) =>
+        {
+            const GitAction commit = GitAction.Commit;
+            if (string.IsNullOrWhiteSpace(message)) return Refused(commit, "Enter a commit message");
+            if (selectedRows.Count == 0) return Refused(commit, "Tick at least one file");
+
+            Hooks.SaveAssets();
+            if (!Hooks.ConfirmSaveModifiedScenes())
+                return new ActionOutcome(commit, OutcomeKind.Cancelled, "Commit cancelled — modified scenes weren't saved");
+
+            var repo = _repo ?? throw new InvalidOperationException("Commit ran without an open repository.");
+            var selected = new HashSet<string>(selectedRows, StringComparer.Ordinal);
+            CommitResult result;
+            Hooks.BeginGitOperation();
+            try
+            {
+                var status = await repo.GetStatusAsync();
+                var rows = SnapshotLoader.ToChanges(status);
+                var current = new Dictionary<string, ChangeItem>(StringComparer.Ordinal);
+                foreach (var row in rows) current[row.Path] = row;
+
+                var shown = new HashSet<string>(shownRows, StringComparer.Ordinal);
+                if (rows.Any(r => !shown.Contains(r.Path)))
+                    return Refused(commit, "Unsaved changes were saved — review the list and commit again.");
+
+                if (SnapshotLoader.ToOperation(status.State) == RepoOperation.Merging && selected.Count != rows.Count)
+                    return Refused(commit, "Finish the merge by committing all files");
+
+                if (selected.Any(p => current.TryGetValue(p, out var c) && c.IsConflicted))
+                    return Refused(commit, "Resolve conflicts first");
+                if (selected.Any(p => !current.ContainsKey(p)))
+                    return Refused(commit, "The file list changed — review it and commit again");
+
+                var unstage = rows.Where(r => !selected.Contains(r.Path) && r.IsStaged).SelectMany(r => r.GitPaths).ToList();
+                if (unstage.Count > 0) await repo.Index.UnstageAsync(unstage);
+                await repo.Index.StageAsync(rows.Where(r => selected.Contains(r.Path)).SelectMany(r => r.GitPaths).ToList());
+                result = await repo.CommitAsync(message.Trim());
+            }
+            finally
+            {
+                Hooks.EndGitOperation();
+                await RefreshAfterActionAsync();
+            }
+
+            switch (result.Status)
+            {
+                case CommitStatus.Committed:
+                    return new ActionOutcome(commit, OutcomeKind.Succeeded, $"Committed {OutcomeMessages.Files(selected.Count)}");
+                case CommitStatus.NothingToCommit:
+                    return Refused(commit, "Nothing to commit");
+                default:
+                    return result.Error != null
+                        ? OutcomeMessages.FromError(commit, result.Error)
+                        : new ActionOutcome(commit, OutcomeKind.Failed, result.Message);
+            }
+        });
+
         public void Cancel()
         {
             CancellationTokenSource? run;
@@ -116,7 +180,7 @@ namespace UnityGit
             {
                 var availability = GetAvailability(action);
                 if (!availability.Enabled)
-                    return Task.FromResult(new ActionOutcome(action, OutcomeKind.Refused, availability.Reason ?? string.Empty));
+                    return Task.FromResult(Refused(action, availability.Reason ?? string.Empty));
 
                 run = new CancellationTokenSource();
                 _actionCts = run;
@@ -125,7 +189,6 @@ namespace UnityGit
                 CanCancel = cancellable;
                 ProgressText = null;
             }
-            RaiseChanged();
             return RunBodyAsync(action, run, body);
         }
 
@@ -135,6 +198,8 @@ namespace UnityGit
             ActionOutcome? outcome = null;
             try
             {
+                // Inside the try, so the finally always clears the busy state.
+                RaiseChanged();
                 outcome = await body(run.Token, new ProgressReporter(p => ReportProgress(run, p)));
             }
             catch (OperationCanceledException)
@@ -148,7 +213,7 @@ namespace UnityGit
             catch (Exception ex)
             {
                 outcome = new ActionOutcome(action, OutcomeKind.Failed, $"Unexpected error: {ex.Message}", ex.ToString());
-                Raise(() => UnexpectedError?.Invoke(ex));
+                Raise(() => ReportUnexpected(ex));
             }
             finally
             {
@@ -177,7 +242,7 @@ namespace UnityGit
                     if (_actionCts != run) return; // Late report from an action that has finished.
                     ProgressText = text;
                 }
-                Changed?.Invoke();
+                InvokeChanged();
             });
         }
 
@@ -227,7 +292,7 @@ namespace UnityGit
             }
             catch (Exception ex)
             {
-                Raise(() => UnexpectedError?.Invoke(ex));
+                Raise(() => ReportUnexpected(ex));
             }
             return false;
         }
@@ -254,7 +319,40 @@ namespace UnityGit
             return await SnapshotLoader.LoadAsync(_repo, ProjectPath, includeLfsLocks, ct, msg => Log?.Invoke(msg)).ConfigureAwait(false);
         }
 
-        void RaiseChanged() => Raise(() => Changed?.Invoke());
+        static ActionOutcome Refused(GitAction action, string message) => new ActionOutcome(action, OutcomeKind.Refused, message);
+
+        void RaiseChanged() => Raise(InvokeChanged);
+
+        // Subscriber exceptions never propagate: they would leave the session busy or throw into a button handler.
+        // Each subscriber is called on its own, so one failing handler doesn't stop the others (window and toolbar) updating.
+        void InvokeChanged()
+        {
+            var handlers = Changed;
+            if (handlers == null) return;
+            foreach (var handler in handlers.GetInvocationList())
+            {
+                try
+                {
+                    ((Action)handler)();
+                }
+                catch (Exception ex)
+                {
+                    ReportUnexpected(ex);
+                }
+            }
+        }
+
+        void ReportUnexpected(Exception ex)
+        {
+            try
+            {
+                UnexpectedError?.Invoke(ex);
+            }
+            catch (Exception)
+            {
+                // A failing error handler has nowhere left to report to.
+            }
+        }
 
         void Raise(Action action)
         {

@@ -33,12 +33,17 @@ namespace UnityGit.Tests
         public string Root { get; }
         public GitOptions Options { get; } = new GitOptions();
 
-        public static Task<GitSandbox> CreateAsync()
+        public static Task<GitSandbox> CreateAsync() => CreateAsync(true);
+
+        public static Task<GitSandbox> CreateAsync(bool withIdentity)
         {
             var root = Path.Combine(Path.GetTempPath(), "UnityGitTests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(root);
             File.WriteAllText(Path.Combine(root, "global.gitconfig"),
-                "[user]\n\tname = Test User\n\temail = test@example.com\n" +
+                (withIdentity
+                    ? "[user]\n\tname = Test User\n\temail = test@example.com\n"
+                    // Stops git guessing an identity from the machine (EMAIL, user@host) on some computers.
+                    : "[user]\n\tuseConfigOnly = true\n") +
                 "[core]\n\tautocrlf = false\n" +
                 "[commit]\n\tgpgsign = false\n" +
                 "[init]\n\tdefaultBranch = main\n");
