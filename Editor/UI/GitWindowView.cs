@@ -98,6 +98,12 @@ namespace UnityGit.UI
                 Render(); // catch up on changes made while detached
             });
             RegisterCallback<DetachFromPanelEvent>(_ => _session.Changed -= Render);
+            _factories[WindowTab.Overview] = session => new OverviewPanel(session);
+            _factories[WindowTab.Changes] = session => new ChangesPanel(session);
+            _factories[WindowTab.Branches] = session => new BranchesPanel(session);
+            _factories[WindowTab.History] = session => new HistoryPanel(session);
+            _factories[WindowTab.Authors] = session => new AuthorsPanel(session);
+            _factories[WindowTab.More] = session => new MorePanel(session);
             Render();
         }
 
@@ -254,7 +260,9 @@ namespace UnityGit.UI
                 }
                 nav.SetSelectionWithoutNotify(new[] { Array.IndexOf(Tabs, SelectedTab) });
 
+                var existed = _panels.ContainsKey(SelectedTab);
                 var panel = PanelFor(SelectedTab);
+                if (existed && panel is IRenderablePanel renderable) renderable.Render(); // a new panel just rendered itself
                 if (panel.parent != host)
                 {
                     host.Clear();

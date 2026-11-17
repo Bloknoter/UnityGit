@@ -20,5 +20,18 @@ namespace UnityGit.UI
         public const string GitMissing = "unitygit-git-missing";
         public const string Nav = "unitygit-nav";
         public const string PanelHost = "unitygit-panel";
+        public const string OverviewBranch = "unitygit-overview-branch";
+        public const string OverviewUser = "unitygit-overview-user";
+        public const string OverviewLfs = "unitygit-overview-lfs";
+        public const string LfsSetupButton = "unitygit-lfs-setup";
+        public const string ChangesList = "unitygit-changes-list";
+        public const string CommitMessage = "unitygit-commit-message";
+        public const string CommitSubmit = "unitygit-commit-submit";
+        public const string LocalBranches = "unitygit-local-branches";
+        public const string RemoteBranches = "unitygit-remote-branches";
+        public const string HistoryList = "unitygit-history";
+        public const string AuthorsList = "unitygit-authors";
+        public const string LocksRefresh = "unitygit-locks-refresh";
+        public const string VerboseToggle = "unitygit-verbose";
     }
 }
