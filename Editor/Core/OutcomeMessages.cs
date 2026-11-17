@@ -1,3 +1,4 @@
+#nullable enable
 using FlexGit;
 
 namespace UnityGit
@@ -20,5 +21,11 @@ namespace UnityGit
                 default: return fallback;
             }
         }
+
+        public static ActionOutcome FromError(GitAction action, GitError error)
+            => new ActionOutcome(action, OutcomeKind.Failed, ForErrorKind(error.Kind, error.Message),
+                string.IsNullOrEmpty(error.StandardError) ? null : error.StandardError);
+
+        public static string Files(int n) => n == 1 ? "1 file" : $"{n} files";
     }
 }
