@@ -5,7 +5,7 @@ using UnityEngine.UIElements;
 
 namespace UnityGit.UI
 {
-    /// <summary>The UnityGit window: Window → UnityGit. Its content is a <see cref="GitWindowView"/>.</summary>
+    /// <summary>The UnityGit window: Tools → Git → UnityGit. Its content is a <see cref="GitWindowView"/>.</summary>
     public sealed class GitWindow : EditorWindow
     {
         const string StyleSheetPath = "Packages/com.bloknoter.unitygit/Editor/UI/GitWindow.uss";
@@ -16,7 +16,7 @@ namespace UnityGit.UI
         public static GitWindow Open() => GetWindow<GitWindow>("UnityGit");
 
         // Unity doesn't promise to accept [MenuItem] on a method that returns a value.
-        [MenuItem("Window/UnityGit")]
+        [MenuItem("Tools/Git/UnityGit")]
         static void OpenFromMenu() => Open();
 
         /// <summary>Opens the window on the Changes panel.</summary>
