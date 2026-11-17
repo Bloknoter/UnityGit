@@ -185,6 +185,80 @@ namespace UnityGit
                 : new ActionOutcome(fetch, OutcomeKind.Failed, result.Message);
         });
 
+        /// <summary>Pulls the upstream branch the way the user's git config says: <c>pull.rebase</c>, then <c>pull.ff</c>, else merge.</summary>
+        public Task<ActionOutcome> PullAsync() => RunAsync(GitAction.Pull, true, async (ct, progress) =>
+        {
+            const GitAction pull = GitAction.Pull;
+            Hooks.SaveAssets();
+            if (!Hooks.ConfirmSaveModifiedScenes())
+                return new ActionOutcome(pull, OutcomeKind.Cancelled, "Pull cancelled — modified scenes weren't saved");
+
+            var repo = _repo ?? throw new InvalidOperationException("Pull ran without an open repository.");
+            var result = await RunGitOperationAsync(async () =>
+                {
+                    var mode = PullModeResolver.Resolve(
+                        await repo.Config.GetAsync("pull.rebase", null, ct),
+                        await repo.Config.GetAsync("pull.ff", null, ct));
+                    return await repo.PullAsync(new PullOptions { Mode = mode }, progress, ct);
+                },
+                r => r.Status is PullStatus.FastForwarded or PullStatus.Merged or PullStatus.Rebased or PullStatus.Conflicts);
+
+            switch (result.Status)
+            {
+                case PullStatus.UpToDate:
+                    return new ActionOutcome(pull, OutcomeKind.Succeeded, "Already up to date");
+                case PullStatus.FastForwarded:
+                case PullStatus.Merged:
+                case PullStatus.Rebased:
+                    return new ActionOutcome(pull, OutcomeKind.Succeeded, "Pulled latest changes");
+                case PullStatus.Conflicts:
+                    var conflicted = Snapshot.Changes.Where(c => c.IsConflicted).Select(c => c.Path).ToList();
+                    return new ActionOutcome(pull, OutcomeKind.Failed,
+                        $"Pull stopped with conflicts in {OutcomeMessages.Files(conflicted.Count)} — resolve them outside UnityGit",
+                        conflictedPaths: conflicted);
+                case PullStatus.LocalChangesWouldBeOverwritten:
+                    return new ActionOutcome(pull, OutcomeKind.Failed, "Pull blocked: your local changes would be overwritten — commit or stash them first");
+                case PullStatus.NoUpstream:
+                    return new ActionOutcome(pull, OutcomeKind.Failed, "This branch has no upstream — push it first");
+                case PullStatus.CannotFastForward:
+                    return new ActionOutcome(pull, OutcomeKind.Failed, "Can't fast-forward — your branch and the remote have diverged");
+                default:
+                    return result.Error != null
+                        ? OutcomeMessages.FromError(pull, result.Error)
+                        : new ActionOutcome(pull, OutcomeKind.Failed, result.Message);
+            }
+        });
+
+        /// <summary>
+        /// Switches to <paramref name="branch"/>: a local branch name, or a remote branch's short name, for which git creates
+        /// a local tracking branch. Never discards local changes: git refuses instead.
+        /// </summary>
+        public Task<ActionOutcome> SwitchBranchAsync(string branch) => RunAsync(GitAction.Switch, true, async (ct, progress) =>
+        {
+            Hooks.SaveAssets();
+            if (!Hooks.ConfirmSaveModifiedScenes())
+                return new ActionOutcome(GitAction.Switch, OutcomeKind.Cancelled, "Switch cancelled — modified scenes weren't saved");
+
+            var repo = _repo ?? throw new InvalidOperationException("Switch ran without an open repository.");
+            var result = await RunGitOperationAsync(() => repo.Branches.SwitchAsync(branch, null, progress, ct),
+                r => r.Status == SwitchStatus.Switched);
+
+            switch (result.Status)
+            {
+                case SwitchStatus.Switched:
+                    return new ActionOutcome(GitAction.Switch, OutcomeKind.Succeeded, $"Switched to {branch}");
+                case SwitchStatus.LocalChangesWouldBeOverwritten:
+                    return new ActionOutcome(GitAction.Switch, OutcomeKind.Failed,
+                        "Switch blocked: your local changes would be overwritten — commit or stash them first");
+                case SwitchStatus.NotFound:
+                    return new ActionOutcome(GitAction.Switch, OutcomeKind.Failed, $"Branch {branch} not found");
+                default:
+                    return result.Error != null
+                        ? OutcomeMessages.FromError(GitAction.Switch, result.Error)
+                        : new ActionOutcome(GitAction.Switch, OutcomeKind.Failed, result.Message);
+            }
+        });
+
         public Task<ActionOutcome> SetUpLfsAsync() => RunAsync(GitAction.SetUpLfs, false, async (_, _) =>
         {
             var repo = _repo ?? throw new InvalidOperationException("LFS setup ran without an open repository.");
@@ -271,18 +345,28 @@ namespace UnityGit
         }
 
         // Runs an action's git work between Hooks.BeginGitOperation() and Hooks.EndGitOperation(), then refreshes the
-        // snapshot (also when the work throws). Bodies build their outcome from the returned result, so it can read
-        // the refreshed snapshot.
-        async Task<T> RunGitOperationAsync<T>(Func<Task<T>> work)
+        // snapshot (also when the work throws). When refreshAssetsWhen accepts the result, Unity reimports the files
+        // git changed: Hooks.RefreshAssets() runs after End, once the lock is released, and before the snapshot refresh.
+        // Bodies build their outcome from the returned result, so it can read the refreshed snapshot.
+        async Task<T> RunGitOperationAsync<T>(Func<Task<T>> work, Func<T, bool>? refreshAssetsWhen = null)
         {
             Hooks.BeginGitOperation();
             try
             {
-                return await work();
+                T result;
+                try
+                {
+                    result = await work();
+                }
+                finally
+                {
+                    Hooks.EndGitOperation();
+                }
+                if (refreshAssetsWhen != null && refreshAssetsWhen(result)) Hooks.RefreshAssets();
+                return result;
             }
             finally
             {
-                Hooks.EndGitOperation();
                 await RefreshAfterActionAsync();
             }
         }
