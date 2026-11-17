@@ -34,6 +34,7 @@ namespace UnityGit.UI
 
         readonly VisualElement _outcomeBar;
         readonly Label _outcomeMessage;
+        readonly Foldout _outcomeConflicts;
         readonly Foldout _outcomeDetails;
         readonly Label _outcomeDetailsText;
         ActionOutcome? _shownOutcome;
@@ -74,11 +75,13 @@ namespace UnityGit.UI
             var outcomeContent = new VisualElement();
             outcomeContent.AddToClassList("unitygit-outcome-content");
             _outcomeMessage = new Label { name = UiNames.Outcome };
+            _outcomeConflicts = new Foldout { name = UiNames.OutcomeConflicts };
             _outcomeDetails = new Foldout { text = "Details", value = false };
             _outcomeDetailsText = new Label();
             _outcomeDetailsText.selection.isSelectable = true; // so git's message can be copied
             _outcomeDetails.Add(_outcomeDetailsText);
             outcomeContent.Add(_outcomeMessage);
+            outcomeContent.Add(_outcomeConflicts);
             outcomeContent.Add(_outcomeDetails);
             _outcomeBar.Add(outcomeContent);
             _outcomeBar.Add(new Button(() => _session.LastOutcome = null) { name = UiNames.OutcomeDismiss, text = "×", tooltip = "Dismiss" });
@@ -170,6 +173,15 @@ namespace UnityGit.UI
             _outcomeMessage.text = outcome.Message;
             _outcomeBar.EnableInClassList("success", outcome.Succeeded);
             _outcomeBar.EnableInClassList("failure", !outcome.Succeeded);
+
+            // Spec §5.5: on conflicts the outcome lists the conflicted files.
+            var conflicts = outcome.ConflictedPaths;
+            SetDisplayed(_outcomeConflicts, conflicts.Count > 0);
+            _outcomeConflicts.text = $"Conflicted files ({conflicts.Count})";
+            _outcomeConflicts.Clear();
+            foreach (var path in conflicts) _outcomeConflicts.Add(new Label(path));
+            _outcomeConflicts.value = true;
+
             SetDisplayed(_outcomeDetails, outcome.Details != null);
             _outcomeDetailsText.text = outcome.Details ?? string.Empty;
             _outcomeDetails.value = false; // each new outcome starts collapsed

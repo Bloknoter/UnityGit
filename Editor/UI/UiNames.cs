@@ -14,6 +14,7 @@ namespace UnityGit.UI
         public const string Progress = "unitygit-progress";
         public const string Outcome = "unitygit-outcome";
         public const string OutcomeDismiss = "unitygit-outcome-dismiss";
+        public const string OutcomeConflicts = "unitygit-outcome-conflicts";
         public const string InitButton = "unitygit-init-button";
         public const string NotRepo = "unitygit-not-repo";
         public const string GitMissing = "unitygit-git-missing";

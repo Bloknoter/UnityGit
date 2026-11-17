@@ -129,6 +129,8 @@ namespace UnityGit.UI
         const string MessageKey = "UnityGit.Outcome.Message";
         const string HasDetailsKey = "UnityGit.Outcome.HasDetails";
         const string DetailsKey = "UnityGit.Outcome.Details";
+        // Newline-separated: the pull that reported the conflicts often triggers the reimport and reload that follow.
+        const string ConflictedPathsKey = "UnityGit.Outcome.ConflictedPaths";
 
         public static void Save(ActionOutcome? o)
         {
@@ -140,6 +142,7 @@ namespace UnityGit.UI
                 SessionState.EraseString(MessageKey);
                 SessionState.EraseBool(HasDetailsKey);
                 SessionState.EraseString(DetailsKey);
+                SessionState.EraseString(ConflictedPathsKey);
                 return;
             }
 
@@ -148,17 +151,20 @@ namespace UnityGit.UI
             SessionState.SetString(MessageKey, o.Message);
             SessionState.SetBool(HasDetailsKey, o.Details != null);
             SessionState.SetString(DetailsKey, o.Details ?? string.Empty);
+            SessionState.SetString(ConflictedPathsKey, string.Join("\n", o.ConflictedPaths));
             SessionState.SetBool(StoredKey, true);
         }
 
         public static ActionOutcome? Load()
         {
             if (!SessionState.GetBool(StoredKey, false)) return null;
+            var conflicted = SessionState.GetString(ConflictedPathsKey, string.Empty);
             return new ActionOutcome(
                 (GitAction)SessionState.GetInt(ActionKey, 0),
                 (OutcomeKind)SessionState.GetInt(KindKey, 0),
                 SessionState.GetString(MessageKey, string.Empty),
-                SessionState.GetBool(HasDetailsKey, false) ? SessionState.GetString(DetailsKey, string.Empty) : null);
+                SessionState.GetBool(HasDetailsKey, false) ? SessionState.GetString(DetailsKey, string.Empty) : null,
+                conflicted.Length == 0 ? null : conflicted.Split('\n'));
         }
     }
 }

@@ -13,8 +13,11 @@ namespace UnityGit.UI
         GitWindowView? _view;
         WindowTab? _pendingTab;
 
-        [MenuItem("Window/UnityGit")]
         public static GitWindow Open() => GetWindow<GitWindow>("UnityGit");
+
+        // Unity doesn't promise to accept [MenuItem] on a method that returns a value.
+        [MenuItem("Window/UnityGit")]
+        static void OpenFromMenu() => Open();
 
         /// <summary>Opens the window on the Changes panel.</summary>
         public static void ShowChanges() => Open().SelectTab(WindowTab.Changes);

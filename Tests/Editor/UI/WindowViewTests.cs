@@ -1,5 +1,6 @@
 #nullable enable
 using System.IO;
+using System.Linq;
 using System.Threading.Tasks;
 using FlexGit;
 using NUnit.Framework;
@@ -107,6 +108,36 @@ namespace UnityGit.Tests
             v.Render();
 
             Assert.That(IsDisplayed(v.Q<Label>(UiNames.Outcome)), Is.False);
+        }
+
+        [Test] public void Outcome_ListsConflictedFiles()
+        {
+            var s = _sb.CreateSession(_sb.MakeDir("p"), new FakeEditorHooks());
+            var v = new GitWindowView(s);
+
+            s.LastOutcome = new ActionOutcome(GitAction.Pull, OutcomeKind.Failed, "m", null, new[] { "README.md", "Assets/A.unity" });
+            v.Render();
+
+            var conflicts = v.Q<Foldout>(UiNames.OutcomeConflicts);
+            Assert.That(conflicts, Is.Not.Null);
+            Assert.That(IsDisplayed(conflicts), Is.True);
+            Assert.That(conflicts.value, Is.True);
+            Assert.That(conflicts.contentContainer.Children().Select(c => ((Label)c).text), Is.EqualTo(new[] { "README.md", "Assets/A.unity" }));
+        }
+
+        [Test] public void OutcomeStore_KeepsConflictedPaths()
+        {
+            var before = OutcomeStore.Load();
+            try
+            {
+                OutcomeStore.Save(new ActionOutcome(GitAction.Pull, OutcomeKind.Failed, "m", null, new[] { "README.md", "Assets/A.unity" }));
+
+                Assert.That(OutcomeStore.Load()!.ConflictedPaths, Is.EqualTo(new[] { "README.md", "Assets/A.unity" }));
+            }
+            finally
+            {
+                OutcomeStore.Save(before);
+            }
         }
 
         [Test] public void OutcomeStore_RoundTrips()
