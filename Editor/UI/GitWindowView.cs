@@ -1,9 +1,11 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine;
 using UnityEngine.UIElements;
+using UnityGit.UI.Theme;
 
 namespace UnityGit.UI
 {
@@ -13,10 +15,13 @@ namespace UnityGit.UI
     /// The window's content (spec §5.7), built in code so it can be created and tested without an EditorWindow.
     /// <see cref="Render"/> updates the existing elements in place, so keyboard focus, an open Details foldout and each
     /// panel's own state survive the frequent refreshes. The body is rebuilt only when the repo's availability changes.
+    /// It wears the vendored EditorUI kit (<see cref="EditorUiTheme"/>) plus GitWindow.uss for layout, so it looks the
+    /// same in a window, in tests and in both editor skins.
     /// </summary>
     public sealed class GitWindowView : VisualElement
     {
         const string GitDownloadUrl = "https://git-scm.com/downloads";
+        const string LayoutSheetPath = "Packages/com.bloknoter.unitygit/Editor/UI/GitWindow.uss";
         static readonly WindowTab[] Tabs = (WindowTab[])Enum.GetValues(typeof(WindowTab));
 
         readonly GitSession _session;
@@ -47,16 +52,21 @@ namespace UnityGit.UI
         {
             _session = session;
             AddToClassList("unitygit-window");
+            EditorUiTheme.Apply(this);
+            var layout = AssetDatabase.LoadAssetAtPath<StyleSheet>(LayoutSheetPath); // after the theme, so it wins ties
+            if (layout != null) styleSheets.Add(layout);
 
-            var toolbar = new Toolbar { name = UiNames.Toolbar };
+            // The kit's inset toolbar: a rounded bar inside the window's padding, lined up with the message and body.
+            var toolbar = EditorUiElements.Toolbar();
+            toolbar.name = UiNames.Toolbar;
             _branchMenu = new ToolbarMenu { name = UiNames.BranchMenu };
             _commitButton = ToolbarAction(UiNames.CommitButton, "Commit", () => SelectTab(WindowTab.Changes));
             _fetchButton = ToolbarAction(UiNames.FetchButton, "Fetch", () => _ = _session.FetchAsync());
             _pullButton = ToolbarAction(UiNames.PullButton, "Pull", () => _ = _session.PullAsync());
             _pushButton = ToolbarAction(UiNames.PushButton, "Push", () => _ = _session.PushAsync());
-            var spacer = new VisualElement();
-            spacer.AddToClassList("unitygit-toolbar-spacer");
             _progress = new Label { name = UiNames.Progress };
+            _progress.AddToClassList(EditorUiClasses.Muted);
+            _progress.AddToClassList(EditorUiClasses.Small);
             _refreshButton = ToolbarAction(UiNames.RefreshButton, "Refresh", () => _ = _session.RefreshAsync(true));
             _cancelButton = ToolbarAction(UiNames.CancelButton, "Cancel", _session.Cancel);
             toolbar.Add(_branchMenu);
@@ -64,27 +74,35 @@ namespace UnityGit.UI
             toolbar.Add(_fetchButton);
             toolbar.Add(_pullButton);
             toolbar.Add(_pushButton);
-            toolbar.Add(spacer);
+            toolbar.Add(EditorUiElements.ToolbarSpacer());
             toolbar.Add(_progress);
             toolbar.Add(_refreshButton);
             toolbar.Add(_cancelButton);
             Add(toolbar);
 
+            // A kit message: the tone follows the outcome; the conflicts and Details foldouts sit inside it.
             _outcomeBar = new VisualElement();
+            _outcomeBar.AddToClassList(EditorUiClasses.Message);
             _outcomeBar.AddToClassList("unitygit-outcome-bar");
             var outcomeContent = new VisualElement();
             outcomeContent.AddToClassList("unitygit-outcome-content");
             _outcomeMessage = new Label { name = UiNames.Outcome };
+            _outcomeMessage.AddToClassList(EditorUiClasses.MessageText);
             _outcomeConflicts = new Foldout { name = UiNames.OutcomeConflicts };
             _outcomeDetails = new Foldout { text = "Details", value = false };
             _outcomeDetailsText = new Label();
+            _outcomeDetailsText.AddToClassList(EditorUiClasses.Mono);
+            _outcomeDetailsText.AddToClassList(EditorUiClasses.Small);
+            _outcomeDetailsText.AddToClassList("unitygit-outcome-details");
             _outcomeDetailsText.selection.isSelectable = true; // so git's message can be copied
             _outcomeDetails.Add(_outcomeDetailsText);
             outcomeContent.Add(_outcomeMessage);
             outcomeContent.Add(_outcomeConflicts);
             outcomeContent.Add(_outcomeDetails);
             _outcomeBar.Add(outcomeContent);
-            _outcomeBar.Add(new Button(() => _session.LastOutcome = null) { name = UiNames.OutcomeDismiss, text = "×", tooltip = "Dismiss" });
+            var dismiss = new Button(() => _session.LastOutcome = null) { name = UiNames.OutcomeDismiss, text = "×", tooltip = "Dismiss" };
+            dismiss.AddToClassList(EditorUiClasses.MessageClose);
+            _outcomeBar.Add(dismiss);
             Add(_outcomeBar);
 
             _body = new VisualElement();
@@ -153,6 +171,9 @@ namespace UnityGit.UI
             ApplyAvailability(_pullButton, GitAction.Pull);
             _pushButton.text = ActionLabels.Push(s);
             ApplyAvailability(_pushButton, GitAction.Push);
+            // Emphasis only: the next sync step, when it can run, is the primary button (pull first when behind, else push).
+            _pullButton.EnableInClassList(EditorUiClasses.ButtonPrimary, s.Behind > 0 && _pullButton.enabledSelf);
+            _pushButton.EnableInClassList(EditorUiClasses.ButtonPrimary, s.Behind == 0 && s.Ahead > 0 && _pushButton.enabledSelf);
 
             _refreshButton.SetEnabled(!_session.IsBusy);
             SetDisplayed(_cancelButton, _session.CanCancel);
@@ -176,16 +197,20 @@ namespace UnityGit.UI
             if (outcome == null || ReferenceEquals(outcome, _shownOutcome)) return; // outcomes are immutable
             _shownOutcome = outcome;
 
-            _outcomeMessage.text = outcome.Message;
-            _outcomeBar.EnableInClassList("success", outcome.Succeeded);
-            _outcomeBar.EnableInClassList("failure", !outcome.Succeeded);
+            EditorUiElements.SetMessage(_outcomeBar, outcome.Message, OutcomeTone(outcome.Kind));
 
             // Spec §5.5: on conflicts the outcome lists the conflicted files.
             var conflicts = outcome.ConflictedPaths;
             SetDisplayed(_outcomeConflicts, conflicts.Count > 0);
             _outcomeConflicts.text = $"Conflicted files ({conflicts.Count})";
             _outcomeConflicts.Clear();
-            foreach (var path in conflicts) _outcomeConflicts.Add(new Label(path));
+            foreach (var path in conflicts)
+            {
+                var label = new Label(path);
+                label.AddToClassList(EditorUiClasses.Mono);
+                label.AddToClassList(EditorUiClasses.Small);
+                _outcomeConflicts.Add(label);
+            }
             _outcomeConflicts.value = true;
 
             SetDisplayed(_outcomeDetails, outcome.Details != null);
@@ -213,31 +238,36 @@ namespace UnityGit.UI
                     return BuildReadyBody();
 
                 case RepoAvailability.GitMissing:
-                    var message = new Label { name = UiNames.GitMissing };
-                    _body.Add(MessageBox(message, new Button(() => Application.OpenURL(GitDownloadUrl)) { text = "Download Git" }));
+                    var message = StateMessage(new Label { name = UiNames.GitMissing });
+                    _body.Add(StateCard(message, Primary(new Button(() => Application.OpenURL(GitDownloadUrl)) { text = "Download Git" })));
                     return () => message.text = _session.Snapshot.Message ?? string.Empty;
 
                 case RepoAvailability.NotARepository:
-                    var init = new Button(() => _ = _session.InitAsync()) { name = UiNames.InitButton, text = "Git init" };
-                    _body.Add(MessageBox(new Label("This project is not in a git repository") { name = UiNames.NotRepo }, init));
+                    var init = Primary(new Button(() => _ = _session.InitAsync()) { name = UiNames.InitButton, text = "Git init" });
+                    _body.Add(StateCard(StateMessage(new Label("This project is not in a git repository") { name = UiNames.NotRepo }), init));
                     return () => ApplyAvailability(init, GitAction.Init);
 
                 default:
-                    _body.Add(MessageBox(new Label("Loading…")));
+                    var loading = StateMessage(new Label("Loading…"));
+                    loading.AddToClassList(EditorUiClasses.Muted);
+                    _body.Add(StateCard(loading));
                     return () => { };
             }
         }
 
         Action BuildReadyBody()
         {
+            // The nav is a kit card listing the tabs; Changes carries a count badge that hides at 0.
             var nav = new ListView
             {
                 name = UiNames.Nav,
                 itemsSource = Tabs,
                 selectionType = SelectionType.Single,
-                makeItem = () => new Label(),
-                bindItem = (item, i) => ((Label)item).text = TabLabel(Tabs[i]),
+                fixedItemHeight = 28,
+                makeItem = () => new NavRow(),
+                bindItem = (item, i) => ((NavRow)item).Bind(TabLabel(Tabs[i]), TabBadge(Tabs[i])),
             };
+            nav.AddToClassList(EditorUiClasses.Card);
             nav.selectedIndicesChanged += _ =>
             {
                 if (nav.selectedIndex >= 0) SelectTab(Tabs[nav.selectedIndex]);
@@ -256,7 +286,7 @@ namespace UnityGit.UI
                 if (changes != shownChanges)
                 {
                     shownChanges = changes;
-                    nav.RefreshItems(); // rebinds "Changes (n)"
+                    nav.RefreshItems(); // rebinds the Changes badge
                 }
                 nav.SetSelectionWithoutNotify(new[] { Array.IndexOf(Tabs, SelectedTab) });
 
@@ -281,8 +311,25 @@ namespace UnityGit.UI
             return panel;
         }
 
-        string TabLabel(WindowTab tab)
-            => tab == WindowTab.Changes ? $"Changes ({_session.Snapshot.Changes.Count})" : tab.ToString();
+        static string TabLabel(WindowTab tab) => tab.ToString();
+
+        /// <summary>The nav badge for <paramref name="tab"/>: the change count on Changes; null (hidden) at 0 and elsewhere.</summary>
+        internal string? TabBadge(WindowTab tab)
+        {
+            var changes = _session.Snapshot.Changes.Count;
+            return tab == WindowTab.Changes && changes > 0 ? PanelParts.Count(changes) : null;
+        }
+
+        /// <summary>The outcome message's tone: success, error, or warning for a cancelled or refused action.</summary>
+        internal static EditorUiTone OutcomeTone(OutcomeKind kind)
+        {
+            switch (kind)
+            {
+                case OutcomeKind.Succeeded: return EditorUiTone.Success;
+                case OutcomeKind.Failed: return EditorUiTone.Error;
+                default: return EditorUiTone.Warning; // Cancelled, Refused
+            }
+        }
 
         void ApplyAvailability(VisualElement element, GitAction action)
         {
@@ -291,18 +338,55 @@ namespace UnityGit.UI
             element.tooltip = availability.Reason ?? string.Empty;
         }
 
-        static ToolbarButton ToolbarAction(string name, string text, Action onClick)
-            => new ToolbarButton(onClick) { name = name, text = text };
+        // Kit buttons rather than ToolbarButtons, which are drawn for Unity's flat toolbar strip.
+        static Button ToolbarAction(string name, string text, Action onClick)
+            => new Button(onClick) { name = name, text = text };
 
-        static VisualElement MessageBox(params VisualElement[] children)
+        static Button Primary(Button button)
         {
-            var box = new VisualElement();
-            box.AddToClassList("unitygit-message");
-            foreach (var child in children) box.Add(child);
-            return box;
+            button.AddToClassList(EditorUiClasses.ButtonPrimary);
+            return button;
+        }
+
+        static Label StateMessage(Label label)
+        {
+            label.AddToClassList("unitygit-state-message");
+            return label;
+        }
+
+        // No repository, Git missing and Loading: a centred kit card holding the message and its button.
+        static VisualElement StateCard(params VisualElement[] children)
+        {
+            var card = EditorUiElements.Card();
+            card.AddToClassList("unitygit-state-card");
+            foreach (var child in children) card.Add(child);
+            return card;
         }
 
         static void SetDisplayed(VisualElement element, bool displayed)
             => element.style.display = displayed ? DisplayStyle.Flex : DisplayStyle.None;
+
+        /// <summary>A nav row: the tab name and a kit badge. Rows are recycled, so <see cref="Bind"/> sets both parts.</summary>
+        sealed class NavRow : VisualElement
+        {
+            readonly Label _name = new Label();
+            readonly Label _badge = EditorUiElements.Badge(string.Empty, EditorUiTone.Accent);
+
+            public NavRow()
+            {
+                AddToClassList("unitygit-nav-row");
+                _name.AddToClassList("unitygit-nav-label");
+                _badge.AddToClassList("unitygit-nav-badge");
+                Add(_name);
+                Add(_badge);
+            }
+
+            public void Bind(string text, string? badge)
+            {
+                _name.text = text;
+                EditorUiElements.SetBadge(_badge, badge ?? string.Empty, EditorUiTone.Accent);
+                SetDisplayed(_badge, badge != null);
+            }
+        }
     }
 }

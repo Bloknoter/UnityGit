@@ -1,68 +1,101 @@
-/* UnityGit window. Colours are Unity's theme variables or translucent tints, so both editor skins work. */
+/* UnityGit window layout.
+   Colours, type and controls come from the vendored EditorUI kit (Theme/EditorDarkTheme.uss), which GitWindowView
+   applies. This sheet only sizes and places things, with the kit's --ed-* variables. GitWindowView adds it after the
+   theme on the same element, so it wins ties; kit rules are overridden with ".unitygit-window ..." selectors that are
+   at least as specific as the kit's ".ed-root ...". */
 
 .unitygit-window {
     flex-grow: 1;
 }
 
-#unitygit-toolbar {
-    flex-shrink: 0;
+/* Toolbar: the kit's inset bar (.ed-toolbar) holding kit buttons. */
+
+#unitygit-toolbar > .unity-button {
+    height: 22px;
+    margin-left: var(--ed-space-1);
+    margin-right: 0;
+    margin-top: 0;
+    margin-bottom: 0;
 }
 
-.unitygit-toolbar-spacer {
-    flex-grow: 1;
+#unitygit-toolbar > #unitygit-commit-button {
+    margin-left: 0;
+}
+
+#unitygit-toolbar > #unitygit-fetch-button {
+    margin-left: var(--ed-space-3);
+}
+
+#unitygit-branch-menu {
+    min-width: 120px;
+    height: 22px;
+    margin-left: 0;
+    margin-right: var(--ed-space-3);
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-left: var(--ed-space-2);
+    padding-right: var(--ed-space-1);
+    border-left-width: 1px;
+    border-right-width: 1px;
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+    border-top-left-radius: var(--ed-radius-s);
+    border-top-right-radius: var(--ed-radius-s);
+    border-bottom-left-radius: var(--ed-radius-s);
+    border-bottom-right-radius: var(--ed-radius-s);
+}
+
+#unitygit-branch-menu > .unity-toolbar-menu__text {
+    -unity-font-style: bold;
 }
 
 #unitygit-progress {
-    -unity-text-align: middle-left;
-    padding: 0 6px;
+    margin-right: var(--ed-space-1);
+    -unity-text-align: middle-right;
 }
 
-.unitygit-outcome-bar {
-    flex-direction: row;
-    flex-shrink: 0;
-    align-items: flex-start;
-    padding: 4px 4px 4px 8px;
-    border-left-width: 3px;
-    border-bottom-width: 1px;
-    border-bottom-color: var(--unity-colors-default-border);
-}
-
-.unitygit-outcome-bar.success {
-    background-color: rgba(76, 175, 80, 0.15);
-    border-left-color: rgb(76, 175, 80);
-}
-
-.unitygit-outcome-bar.failure {
-    background-color: rgba(229, 72, 60, 0.15);
-    border-left-color: rgb(229, 72, 60);
-}
+/* Outcome: a kit message whose text column also holds the conflicts and Details foldouts. */
 
 .unitygit-outcome-content {
     flex-grow: 1;
     flex-shrink: 1;
 }
 
-#unitygit-outcome {
-    white-space: normal;
-    padding-top: 2px;
+.unitygit-outcome-content > .unity-foldout {
+    margin-top: var(--ed-space-1);
 }
 
-#unitygit-outcome-dismiss {
-    flex-shrink: 0;
+.unitygit-outcome-details {
+    white-space: normal;
 }
+
+/* Body: a centred card for No repository / Git missing / Loading, else the nav and the panel. */
 
 .unitygit-body {
     flex-grow: 1;
 }
 
-.unitygit-message {
-    align-items: flex-start;
-    padding: 12px;
+.unitygit-window .unitygit-state-card {
+    align-self: center;
+    width: 100%;
+    max-width: 440px;
+    margin-top: var(--ed-space-4);
 }
 
-.unitygit-message > Label {
+.unitygit-window .unitygit-state-card > .ed-card__content {
+    align-items: flex-start;
+    padding-left: var(--ed-space-4);
+    padding-right: var(--ed-space-4);
+    padding-top: var(--ed-space-4);
+    padding-bottom: var(--ed-space-4);
+}
+
+.unitygit-state-message {
     white-space: normal;
-    margin-bottom: 8px;
+    font-size: var(--ed-font-l);
+    margin-bottom: var(--ed-space-3);
+    padding-left: 0;
+    padding-right: 0;
 }
 
 .unitygit-split {
@@ -71,83 +104,245 @@
 }
 
 #unitygit-nav {
-    width: 140px;
+    width: 150px;
     flex-shrink: 0;
-    border-right-width: 1px;
-    border-right-color: var(--unity-colors-default-border);
+    padding-top: var(--ed-space-1);
+    padding-bottom: var(--ed-space-1);
+}
+
+.unitygit-nav-row {
+    flex-grow: 1;
+    flex-direction: row;
+    align-items: center;
+    padding-left: var(--ed-space-3);
+    padding-right: var(--ed-space-2);
+}
+
+.unitygit-nav-label {
+    flex-grow: 1;
+    flex-shrink: 1;
+    margin-left: 0;
+    padding-left: 0;
+    -unity-text-align: middle-left;
+}
+
+.unitygit-window .unity-collection-view__item--selected .unitygit-nav-label {
+    -unity-font-style: bold;
 }
 
 #unitygit-panel {
     flex-grow: 1;
     flex-shrink: 1;
+    margin-left: var(--ed-space-2);
 }
 
 /* Panels */
 
 .unitygit-panel-content {
     flex-grow: 1;
-    padding: 6px;
+    flex-shrink: 1;
 }
 
-.unitygit-header {
-    -unity-font-style: bold;
-    margin: 6px 0 2px 0;
+.unitygit-scroll {
+    flex-grow: 1;
+    margin-bottom: var(--ed-space-2);
+}
+
+.unitygit-window .ed-card.unitygit-fill,
+.unitygit-window .ed-table.unitygit-fill {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-height: 88px;
+}
+
+.unitygit-window .ed-table.unitygit-fill {
+    margin-bottom: var(--ed-space-2);
+}
+
+.unitygit-window .unitygit-list-card > .ed-card__content {
+    flex-grow: 1;
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.unitygit-window .unitygit-header-only > .ed-card__header {
+    border-bottom-width: 0;
 }
 
 .unitygit-list {
     flex-grow: 1;
     flex-shrink: 1;
-    min-height: 60px;
 }
 
-.unitygit-row {
+.unitygit-card-note {
+    padding-left: var(--ed-space-3);
+    padding-right: var(--ed-space-3);
+    padding-top: var(--ed-space-2);
+    padding-bottom: var(--ed-space-2);
+}
+
+/* Card lines (Overview) */
+
+.unitygit-window .unitygit-inline {
     flex-direction: row;
-    align-items: flex-start;
-    margin-bottom: 4px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.unitygit-overview-branch-name {
+    font-size: var(--ed-font-l);
+    white-space: normal;
+    padding-left: 0;
+}
+
+.unitygit-overview-sha {
+    flex-shrink: 0;
+    margin-right: var(--ed-space-1);
+}
+
+.unitygit-field {
+    flex-direction: row;
+    align-items: center;
+    min-height: 20px;
+    margin-bottom: 2px;
 }
 
 .unitygit-caption {
-    width: 70px;
+    width: 64px;
     flex-shrink: 0;
-    opacity: 0.7;
+    padding-left: 0;
 }
 
 .unitygit-value {
     flex-grow: 1;
     flex-shrink: 1;
     white-space: normal;
+    padding-left: 0;
 }
 
-.unitygit-change-row {
+/* List rows */
+
+.unitygit-list-row {
+    flex-grow: 1;
     flex-direction: row;
     align-items: center;
+    overflow: hidden;
+    padding-left: var(--ed-space-2);
+    padding-right: var(--ed-space-2);
 }
 
-.unitygit-badge {
-    width: 18px;
-    margin: 0 6px 0 2px;
-    -unity-text-align: middle-center;
-    -unity-font-style: bold;
-    border-radius: 3px;
-    background-color: rgba(128, 128, 128, 0.25);
+.unitygit-ellipsis {
+    flex-shrink: 1;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
 }
 
-.unitygit-badge.kind-added,
-.unitygit-badge.kind-untracked {
-    background-color: rgba(76, 175, 80, 0.35);
+.unitygit-path {
+    -unity-text-overflow-position: start;
 }
 
-.unitygit-badge.kind-deleted,
-.unitygit-badge.kind-conflicted {
-    background-color: rgba(229, 72, 60, 0.35);
+.unitygit-row-subject {
+    flex-grow: 1;
+    margin-left: var(--ed-space-2);
 }
 
-.unitygit-commit-message {
+.unitygit-window .unitygit-list-row > .ed-badge {
+    margin-left: var(--ed-space-1);
+    margin-right: 0;
+}
+
+.unitygit-window .unitygit-list-row > .ed-chip,
+.unitygit-window .unitygit-inline > .ed-chip {
+    margin-left: var(--ed-space-1);
+    margin-right: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.unitygit-window .unitygit-list-row > .unitygit-kind-badge {
+    min-width: 20px;
+    margin-left: var(--ed-space-1);
+    margin-right: var(--ed-space-2);
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.unitygit-change-path {
+    flex-grow: 1;
+}
+
+.unitygit-branch-name {
     flex-shrink: 0;
+}
+
+.unitygit-branch-upstream {
+    margin-left: var(--ed-space-1);
+}
+
+.unitygit-sha {
+    width: 60px;
+    flex-shrink: 0;
+}
+
+.unitygit-commit-author {
+    max-width: 160px;
+    margin-left: var(--ed-space-2);
+}
+
+.unitygit-commit-date {
+    flex-shrink: 0;
+    margin-left: var(--ed-space-2);
+    -unity-text-align: middle-right;
+}
+
+.unitygit-pair-key {
+    flex-shrink: 0;
+}
+
+.unitygit-pair-owner {
+    max-width: 40%;
+    margin-left: var(--ed-space-2);
+}
+
+/* Authors: kit table columns */
+
+.unitygit-window .ed-table__cell.unitygit-col-name {
+    flex-grow: 2;
+}
+
+.unitygit-window .ed-table__cell.unitygit-col-email {
+    flex-grow: 3;
+}
+
+.unitygit-window .ed-table__cell.unitygit-col-count {
+    flex-grow: 0;
+    flex-shrink: 0;
+    flex-basis: 80px;
+}
+
+/* Changes: the commit card */
+
+.unitygit-window .unitygit-commit-message {
     min-height: 54px;
-    margin-top: 6px;
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 0;
+    margin-bottom: var(--ed-space-2);
 }
 
 .unitygit-commit-message > .unity-base-text-field__input {
     white-space: normal;
+}
+
+.unitygit-commit-actions {
+    flex-direction: row;
+    justify-content: flex-end;
+}
+
+.unitygit-window .unitygit-commit-actions > .unity-button {
+    min-width: 96px;
+    margin-right: 0;
 }

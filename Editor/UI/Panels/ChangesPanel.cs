@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using UnityEngine.UIElements;
+using UnityGit.UI.Theme;
 
 namespace UnityGit.UI
 {
@@ -24,29 +25,36 @@ namespace UnityGit.UI
         public ChangesPanel(GitSession session)
         {
             _session = session;
-            AddToClassList("unitygit-panel-content");
+            AddToClassList(PanelClasses.Content);
 
             _list = new ListView
             {
                 name = UiNames.ChangesList,
-                fixedItemHeight = 22,
-                showBorder = true,
+                fixedItemHeight = 24,
+                showBorder = false,
+                showAlternatingRowBackgrounds = AlternatingRowBackground.ContentOnly,
                 selectionType = SelectionType.None,
                 itemsSource = _items,
-                makeItem = MakeRow,
+                makeItem = () => new ChangeRow(this),
                 bindItem = BindRow,
             };
-            _list.AddToClassList("unitygit-list");
-            _list.AddToClassList("unitygit-changes-list");
-            Add(_list);
+            _list.AddToClassList(PanelClasses.List);
+            Add(PanelParts.ListCard(null, _list));
 
+            var commitCard = EditorUiElements.Card();
+            commitCard.AddToClassList("unitygit-commit-card");
             _message = new TextField { name = UiNames.CommitMessage, multiline = true };
             _message.AddToClassList("unitygit-commit-message");
             _message.RegisterValueChangedCallback(_ => UpdateSubmit());
-            Add(_message);
+            commitCard.Add(_message);
 
             _submit = new Button(() => _ = SubmitCommitAsync()) { name = UiNames.CommitSubmit, text = "Commit" };
-            Add(_submit);
+            _submit.AddToClassList(EditorUiClasses.ButtonPrimary);
+            var actions = new VisualElement();
+            actions.AddToClassList("unitygit-commit-actions");
+            actions.Add(_submit);
+            commitCard.Add(actions);
+            Add(commitCard);
             Render();
         }
 
@@ -96,6 +104,25 @@ namespace UnityGit.UI
             UpdateSubmit();
         }
 
+        /// <summary>The badge tone for a change kind: additions green, edits blue, removals and conflicts red, moves accent.</summary>
+        internal static EditorUiTone KindTone(ChangeKind kind)
+        {
+            switch (kind)
+            {
+                case ChangeKind.Added:
+                case ChangeKind.Untracked:
+                    return EditorUiTone.Success;
+                case ChangeKind.Deleted:
+                case ChangeKind.Conflicted:
+                    return EditorUiTone.Error;
+                case ChangeKind.Renamed:
+                case ChangeKind.Copied:
+                    return EditorUiTone.Accent;
+                default: // Modified, TypeChanged
+                    return EditorUiTone.Info;
+            }
+        }
+
         void UpdateSubmit()
         {
             var availability = _session.GetAvailability(GitAction.Commit);
@@ -104,36 +131,19 @@ namespace UnityGit.UI
             _submit.tooltip = availability.Reason ?? string.Empty;
         }
 
-        VisualElement MakeRow()
+        // Rows are recycled, so every part of the row is set here.
+        void BindRow(VisualElement element, int index)
         {
-            var row = new VisualElement();
-            row.AddToClassList("unitygit-change-row");
-            var toggle = new Toggle();
-            toggle.RegisterValueChangedCallback(e =>
-            {
-                if (row.userData is string path) SetTicked(path, e.newValue);
-            });
-            var badge = new Label();
-            badge.AddToClassList("unitygit-badge");
-            row.Add(toggle);
-            row.Add(badge);
-            row.Add(new Label());
-            return row;
-        }
-
-        void BindRow(VisualElement row, int index)
-        {
+            var row = (ChangeRow)element;
             var item = _items[index];
             row.userData = item.Path;
-            var toggle = (Toggle)row[0];
-            toggle.SetValueWithoutNotify(IsTicked(item.Path));
-            toggle.SetEnabled(!item.IsConflicted && !_merging);
-            var badge = (Label)row[1];
-            badge.text = BadgeText(item.Kind);
-            badge.tooltip = item.Kind.ToString();
-            foreach (ChangeKind kind in Enum.GetValues(typeof(ChangeKind)))
-                badge.EnableInClassList("kind-" + kind.ToString().ToLowerInvariant(), kind == item.Kind);
-            ((Label)row[2]).text = item.Path + (item.HasMeta ? " (+ .meta)" : "");
+            row.Tick.SetValueWithoutNotify(IsTicked(item.Path));
+            row.Tick.SetEnabled(!item.IsConflicted && !_merging);
+            EditorUiElements.SetBadge(row.Kind, BadgeText(item.Kind), KindTone(item.Kind));
+            row.Kind.tooltip = item.Kind.ToString();
+            row.Path.text = item.Path;
+            row.Path.tooltip = item.Path;
+            PanelParts.SetDisplayed(row.Meta, item.HasMeta);
         }
 
         static string BadgeText(ChangeKind kind)
@@ -148,6 +158,29 @@ namespace UnityGit.UI
                 case ChangeKind.TypeChanged: return "T";
                 case ChangeKind.Untracked: return "U";
                 default: return "!";
+            }
+        }
+
+        /// <summary>A change row: checkbox, kind badge, path and a ".meta" chip when the asset's .meta is paired with it.</summary>
+        sealed class ChangeRow : VisualElement
+        {
+            public readonly Toggle Tick = new Toggle();
+            public readonly Label Kind = EditorUiElements.Badge(string.Empty, EditorUiTone.Neutral);
+            public readonly Label Path = PanelParts.Text(null, PanelClasses.Ellipsis, PanelClasses.Path, "unitygit-change-path");
+            public readonly Label Meta = EditorUiElements.Chip(".meta");
+
+            public ChangeRow(ChangesPanel panel)
+            {
+                AddToClassList(PanelClasses.Row);
+                Kind.AddToClassList("unitygit-kind-badge");
+                Tick.RegisterValueChangedCallback(e =>
+                {
+                    if (userData is string path) panel.SetTicked(path, e.newValue);
+                });
+                Add(Tick);
+                Add(Kind);
+                Add(Path);
+                Add(Meta);
             }
         }
     }

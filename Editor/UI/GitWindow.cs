@@ -1,15 +1,15 @@
 #nullable enable
 using UnityEditor;
 using UnityEngine;
-using UnityEngine.UIElements;
 
 namespace UnityGit.UI
 {
-    /// <summary>The UnityGit window: Tools → Git → UnityGit. Its content is a <see cref="GitWindowView"/>.</summary>
+    /// <summary>
+    /// The UnityGit window: Tools → Git → UnityGit. Its content is a <see cref="GitWindowView"/>, which brings its own
+    /// theme and layout style sheets, so the window only hosts it.
+    /// </summary>
     public sealed class GitWindow : EditorWindow
     {
-        const string StyleSheetPath = "Packages/com.bloknoter.unitygit/Editor/UI/GitWindow.uss";
-
         GitWindowView? _view;
         WindowTab? _pendingTab;
 
@@ -32,9 +32,6 @@ namespace UnityGit.UI
         void CreateGUI()
         {
             titleContent = new GUIContent("UnityGit");
-            var styles = AssetDatabase.LoadAssetAtPath<StyleSheet>(StyleSheetPath);
-            if (styles != null) rootVisualElement.styleSheets.Add(styles);
-
             _view = new GitWindowView(SessionProvider.Current);
             if (_pendingTab is WindowTab tab) _view.SelectTab(tab);
             _pendingTab = null;

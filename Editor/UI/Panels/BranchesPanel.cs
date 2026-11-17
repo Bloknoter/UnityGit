@@ -1,23 +1,21 @@
 #nullable enable
-using System.Collections.Generic;
 using UnityEngine.UIElements;
+using UnityGit.UI.Theme;
 
 namespace UnityGit.UI
 {
     internal sealed class BranchesPanel : VisualElement, IRenderablePanel
     {
         readonly GitSession _session;
-        readonly TextList<BranchItem> _local = new TextList<BranchItem>(UiNames.LocalBranches, Text);
-        readonly TextList<BranchItem> _remote = new TextList<BranchItem>(UiNames.RemoteBranches, Text);
+        readonly RowList<BranchItem> _local = new RowList<BranchItem>(UiNames.LocalBranches, () => new BranchRow(), BranchRow.Bind, Key);
+        readonly RowList<BranchItem> _remote = new RowList<BranchItem>(UiNames.RemoteBranches, () => new BranchRow(), BranchRow.Bind, Key);
 
         public BranchesPanel(GitSession session)
         {
             _session = session;
-            AddToClassList("unitygit-panel-content");
-            Add(PanelParts.Header("Local branches"));
-            Add(_local.View);
-            Add(PanelParts.Header("Remote branches"));
-            Add(_remote.View);
+            AddToClassList(PanelClasses.Content);
+            Add(_local.InCard("Local branches"));
+            Add(_remote.InCard("Remote branches"));
             _local.OnChosen(b => _ = _session.SwitchBranchAsync(b.Name));
             _remote.OnChosen(b => _ = _session.SwitchBranchAsync(b.ShortName));
             Render();
@@ -29,13 +27,45 @@ namespace UnityGit.UI
             _remote.Set(_session.Snapshot.RemoteBranches);
         }
 
-        static string Text(BranchItem b)
+        static string Key(BranchItem b) => $"{b.Name}\n{b.IsCurrent}\n{b.Upstream}\n{b.Ahead}\n{b.Behind}\n{b.LastCommitSubject}";
+
+        /// <summary>Name, a "current" badge, the upstream, ahead/behind chips and the muted last subject.</summary>
+        sealed class BranchRow : VisualElement
         {
-            var parts = new List<string> { b.Name };
-            if (b.Upstream != null) parts.Add($"→ {b.Upstream}");
-            if (b.Ahead != 0 || b.Behind != 0) parts.Add($"↑{b.Ahead} ↓{b.Behind}");
-            if (b.LastCommitSubject.Length > 0) parts.Add(b.LastCommitSubject);
-            return string.Join("  ", parts);
+            readonly Label _name = PanelParts.Text(null, "unitygit-branch-name");
+            readonly Label _current = EditorUiElements.Badge("current", EditorUiTone.Accent);
+            readonly Label _upstream = PanelParts.Text(null, EditorUiClasses.Muted, EditorUiClasses.Small, PanelClasses.Ellipsis, "unitygit-branch-upstream");
+            readonly Label _ahead = EditorUiElements.Chip(string.Empty, EditorUiTone.Info);
+            readonly Label _behind = EditorUiElements.Chip(string.Empty, EditorUiTone.Warning);
+            readonly Label _subject = PanelParts.Text(null, EditorUiClasses.Muted, PanelClasses.Ellipsis, "unitygit-row-subject");
+
+            public BranchRow()
+            {
+                AddToClassList(PanelClasses.Row);
+                Add(_name);
+                Add(_current);
+                Add(_upstream);
+                Add(_ahead);
+                Add(_behind);
+                Add(_subject);
+            }
+
+            // Rows are recycled, so every part of the row is set here.
+            public static void Bind(VisualElement element, BranchItem b)
+            {
+                var row = (BranchRow)element;
+                row._name.text = b.Name;
+                row._name.EnableInClassList(EditorUiClasses.Strong, b.IsCurrent);
+                PanelParts.SetDisplayed(row._current, b.IsCurrent);
+                row._upstream.text = b.Upstream != null ? $"→ {b.Upstream}" : string.Empty;
+                PanelParts.SetDisplayed(row._upstream, b.Upstream != null);
+                row._ahead.text = $"↑{b.Ahead}";
+                PanelParts.SetDisplayed(row._ahead, b.Ahead != 0);
+                row._behind.text = $"↓{b.Behind}";
+                PanelParts.SetDisplayed(row._behind, b.Behind != 0);
+                row._subject.text = b.LastCommitSubject;
+                row.tooltip = b.LastCommitSubject;
+            }
         }
     }
 }
