@@ -75,19 +75,13 @@ namespace UnityGit
         public Task<ActionOutcome> InitAsync() => RunAsync(GitAction.Init, false, async (_, _) =>
         {
             var gitignore = Path.Combine(ProjectPath, ".gitignore");
-            bool kept;
-            Hooks.BeginGitOperation();
-            try
+            var kept = await RunGitOperationAsync(async () =>
             {
                 _repo = await GitRepository.InitAsync(ProjectPath, "main", false, _options);
-                kept = File.Exists(gitignore);
-                if (!kept) File.WriteAllText(gitignore, GitignoreTemplate.Text);
-            }
-            finally
-            {
-                Hooks.EndGitOperation();
-                await RefreshAfterActionAsync();
-            }
+                var exists = File.Exists(gitignore);
+                if (!exists) File.WriteAllText(gitignore, GitignoreTemplate.Text);
+                return exists;
+            });
             return new ActionOutcome(GitAction.Init, OutcomeKind.Succeeded,
                 kept ? "Repository created — existing .gitignore kept" : "Repository created with a Unity .gitignore");
         });
@@ -109,9 +103,7 @@ namespace UnityGit
 
             var repo = _repo ?? throw new InvalidOperationException("Commit ran without an open repository.");
             var selected = new HashSet<string>(selectedRows, StringComparer.Ordinal);
-            CommitResult result;
-            Hooks.BeginGitOperation();
-            try
+            var (refusal, result) = await RunGitOperationAsync<(ActionOutcome? Refusal, CommitResult? Result)>(async () =>
             {
                 var status = await repo.GetStatusAsync();
                 var rows = SnapshotLoader.ToChanges(status);
@@ -120,15 +112,15 @@ namespace UnityGit
 
                 var shown = new HashSet<string>(shownRows, StringComparer.Ordinal);
                 if (rows.Any(r => !shown.Contains(r.Path)))
-                    return Refused(commit, "Unsaved changes were saved — review the list and commit again.");
+                    return (Refused(commit, "Unsaved changes were saved — review the list and commit again."), null);
 
                 if (SnapshotLoader.ToOperation(status.State) == RepoOperation.Merging && selected.Count != rows.Count)
-                    return Refused(commit, "Finish the merge by committing all files");
+                    return (Refused(commit, "Finish the merge by committing all files"), null);
 
                 if (selected.Any(p => current.TryGetValue(p, out var c) && c.IsConflicted))
-                    return Refused(commit, "Resolve conflicts first");
+                    return (Refused(commit, "Resolve conflicts first"), null);
                 if (selected.Any(p => !current.ContainsKey(p)))
-                    return Refused(commit, "The file list changed — review it and commit again");
+                    return (Refused(commit, "The file list changed — review it and commit again"), null);
 
                 // Unselected staged rows are unstaged so they stay out. The rename sources of selected rows are unstaged
                 // too: a staged rename has already dropped its old path from the index, so git add would reject it.
@@ -142,15 +134,11 @@ namespace UnityGit
                     .ToList();
                 if (unstage.Count > 0) await repo.Index.UnstageAsync(unstage);
                 await repo.Index.StageAsync(rows.Where(r => selected.Contains(r.Path)).SelectMany(r => r.GitPaths).ToList());
-                result = await repo.CommitAsync(message.Trim());
-            }
-            finally
-            {
-                Hooks.EndGitOperation();
-                await RefreshAfterActionAsync();
-            }
+                return (null, await repo.CommitAsync(message.Trim()));
+            });
+            if (refusal != null) return refusal;
 
-            switch (result.Status)
+            switch (result!.Status)
             {
                 case CommitStatus.Committed:
                     return new ActionOutcome(commit, OutcomeKind.Succeeded, $"Committed {OutcomeMessages.Files(selected.Count)}");
@@ -167,17 +155,7 @@ namespace UnityGit
         {
             const GitAction push = GitAction.Push;
             var repo = _repo ?? throw new InvalidOperationException("Push ran without an open repository.");
-            PushResult result;
-            Hooks.BeginGitOperation();
-            try
-            {
-                result = await repo.PushAsync(null, progress, ct);
-            }
-            finally
-            {
-                Hooks.EndGitOperation();
-                await RefreshAfterActionAsync();
-            }
+            var result = await RunGitOperationAsync(() => repo.PushAsync(null, progress, ct));
 
             switch (result.Status)
             {
@@ -198,17 +176,7 @@ namespace UnityGit
         {
             const GitAction fetch = GitAction.Fetch;
             var repo = _repo ?? throw new InvalidOperationException("Fetch ran without an open repository.");
-            FetchResult result;
-            Hooks.BeginGitOperation();
-            try
-            {
-                result = await repo.FetchAsync(null, progress, ct);
-            }
-            finally
-            {
-                Hooks.EndGitOperation();
-                await RefreshAfterActionAsync();
-            }
+            var result = await RunGitOperationAsync(() => repo.FetchAsync(null, progress, ct));
 
             if (result.Status == FetchStatus.Succeeded)
                 return new ActionOutcome(fetch, OutcomeKind.Succeeded, "Fetch complete");
@@ -220,17 +188,7 @@ namespace UnityGit
         public Task<ActionOutcome> SetUpLfsAsync() => RunAsync(GitAction.SetUpLfs, false, async (_, _) =>
         {
             var repo = _repo ?? throw new InvalidOperationException("LFS setup ran without an open repository.");
-            bool installed;
-            Hooks.BeginGitOperation();
-            try
-            {
-                installed = await repo.Lfs.EnsureInstalledAsync();
-            }
-            finally
-            {
-                Hooks.EndGitOperation();
-                await RefreshAfterActionAsync();
-            }
+            var installed = await RunGitOperationAsync(() => repo.Lfs.EnsureInstalledAsync());
             return new ActionOutcome(GitAction.SetUpLfs, OutcomeKind.Succeeded,
                 installed ? "LFS set up for this repository" : "LFS was already set up");
         });
@@ -249,10 +207,9 @@ namespace UnityGit
             }
         }
 
-        // The runner every action goes through. Bodies call Hooks.BeginGitOperation() before their first git call,
-        // Hooks.EndGitOperation() in a finally, then RefreshAfterActionAsync(). They stay on the caller's context
-        // (no ConfigureAwait(false)) so the hooks run on Unity's main thread. Cancellable bodies pass the token
-        // to every FlexGit call.
+        // The runner every action goes through. Bodies make their git calls inside RunGitOperationAsync. They stay on
+        // the caller's context (no ConfigureAwait(false)) so the hooks run on Unity's main thread. Cancellable bodies
+        // pass the token to every FlexGit call.
         Task<ActionOutcome> RunAsync(GitAction action, bool cancellable,
             Func<CancellationToken, IProgress<GitProgress>, Task<ActionOutcome>> body)
         {
@@ -311,6 +268,23 @@ namespace UnityGit
                 RaiseChanged();
             }
             return outcome;
+        }
+
+        // Runs an action's git work between Hooks.BeginGitOperation() and Hooks.EndGitOperation(), then refreshes the
+        // snapshot (also when the work throws). Bodies build their outcome from the returned result, so it can read
+        // the refreshed snapshot.
+        async Task<T> RunGitOperationAsync<T>(Func<Task<T>> work)
+        {
+            Hooks.BeginGitOperation();
+            try
+            {
+                return await work();
+            }
+            finally
+            {
+                Hooks.EndGitOperation();
+                await RefreshAfterActionAsync();
+            }
         }
 
         void ReportProgress(CancellationTokenSource run, GitProgress progress)
