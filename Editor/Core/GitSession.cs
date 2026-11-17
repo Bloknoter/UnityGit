@@ -130,7 +130,10 @@ namespace UnityGit
                 if (selected.Any(p => !current.ContainsKey(p)))
                     return Refused(commit, "The file list changed — review it and commit again");
 
-                var unstage = rows.Where(r => !selected.Contains(r.Path) && r.IsStaged).SelectMany(r => r.GitPaths).ToList();
+                // Every staged row is unstaged: unselected ones so they stay out, selected ones so they are staged again
+                // from scratch (git add rejects the old path of a rename staged outside the tool, since the index has
+                // already dropped it).
+                var unstage = rows.Where(r => r.IsStaged).SelectMany(r => r.GitPaths).ToList();
                 if (unstage.Count > 0) await repo.Index.UnstageAsync(unstage);
                 await repo.Index.StageAsync(rows.Where(r => selected.Contains(r.Path)).SelectMany(r => r.GitPaths).ToList());
                 result = await repo.CommitAsync(message.Trim());

@@ -47,10 +47,15 @@ namespace UnityGit.Tests
 
         static Task<string?> Head(GitRepository repo) => repo.ResolveRevisionAsync("HEAD");
 
+        static GitResult Ok(GitResult r)
+        {
+            Assert.That(r.Succeeded, Is.True, $"{r.CommandLine} failed with exit code {r.ExitCode}: {r.StandardError}");
+            return r;
+        }
+
         static async Task<string[]> HeadFiles(GitRepository repo)
         {
-            var r = await repo.RunRawAsync("show", "--name-only", "--format=", "HEAD");
-            Assert.That(r.Succeeded, Is.True, $"{r.CommandLine} failed with exit code {r.ExitCode}: {r.StandardError}");
+            var r = Ok(await repo.RunRawAsync("show", "--name-only", "--format=", "HEAD"));
             return r.StandardOutput.Split('\n').Select(l => l.TrimEnd('\r')).Where(l => l.Length > 0).ToArray();
         }
 
@@ -88,6 +93,34 @@ namespace UnityGit.Tests
             var o = await s.CommitAsync("add X", new[] { "Assets/X.asset" }, Rows(s));
             Assert.That(o.Kind, Is.EqualTo(OutcomeKind.Succeeded));
             Assert.That(await HeadFiles(repo), Is.EquivalentTo(new[] { "Assets/X.asset", "Assets/X.asset.meta" }));
+        }
+
+        [Test] public async Task Commit_StagedRename_IsCommitted()
+        {
+            var repo = await _sb.InitRepoAsync("p");
+            GitSandbox.WriteFile(repo, "Assets/Old.asset", "asset content\n");
+            GitSandbox.WriteFile(repo, "Assets/Old.asset.meta", "guid: 1\n");
+            await repo.Index.StageAsync(new[] { "Assets/Old.asset", "Assets/Old.asset.meta" });
+            var initial = await repo.CommitAsync("initial");
+            Assert.That(initial.Succeeded, Is.True, initial.Message);
+            Ok(await repo.RunRawAsync("mv", "Assets/Old.asset", "Assets/New.asset"));
+            Ok(await repo.RunRawAsync("mv", "Assets/Old.asset.meta", "Assets/New.asset.meta"));
+            var s = _sb.CreateSession(repo.WorkingDirectory, new FakeEditorHooks());
+            await s.RefreshAsync();
+            Assert.That(Rows(s), Is.EqualTo(new[] { "Assets/New.asset" }));
+            Assert.That(s.Snapshot.Changes[0].Kind, Is.EqualTo(ChangeKind.Renamed));
+
+            var o = await s.CommitAsync("rename", Rows(s), Rows(s));
+            Assert.That(o.Kind, Is.EqualTo(OutcomeKind.Succeeded), o.Message);
+            var show = Ok(await repo.RunRawAsync("show", "--name-status", "--format=", "-M", "HEAD"));
+            var renames = show.StandardOutput.Split('\n').Select(l => l.TrimEnd('\r')).Where(l => l.Length > 0)
+                .Select(l => l.Split('\t')).Select(f => $"{f[0][0]} {f[1]} -> {f[f.Length - 1]}");
+            Assert.That(renames, Is.EquivalentTo(new[]
+            {
+                "R Assets/Old.asset -> Assets/New.asset",
+                "R Assets/Old.asset.meta -> Assets/New.asset.meta",
+            }));
+            Assert.That(s.Snapshot.Changes, Is.Empty);
         }
 
         [Test] public async Task Commit_CallsSaveThenConfirmThenBeginEnd()
