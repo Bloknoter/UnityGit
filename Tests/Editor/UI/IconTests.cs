@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using FlexGit;
 using NUnit.Framework;
@@ -90,6 +91,48 @@ namespace UnityGit.Tests
             Assert.That(fetch[0], Is.InstanceOf<Image>());
             Assert.That(fetch[0].ClassListContains("unity-button__image"), Is.True);
             Assert.That(fetch.text, Is.EqualTo("Fetch"));
+        }
+
+        // The icon takes the colour of the label beside it, and a disabled control fades both together (Unity gives the
+        // whole control 0.5 opacity). Covers a plain button, a primary button and the branch menu, enabled and disabled.
+        [Test] public async Task IconTint_ReadsLikeLabel_EnabledAndDisabled()
+        {
+            var trio = await _sb.CreateTrioAsync();
+            GitSandbox.WriteFile(trio.Local, "a.txt", "a"); // a row, so Commit can be enabled
+            var s = _sb.CreateSession(trio.Local.WorkingDirectory, new FakeEditorHooks());
+            await s.RefreshAsync();
+            var v = new GitWindowView(s);
+            using (var window = UnityGitTestWindow.Open(v))
+            {
+                v.SelectTab(WindowTab.Changes);
+                var controls = new VisualElement[]
+                {
+                    v.Q<Button>(UiNames.FetchButton),
+                    v.Q<Button>(UiNames.CommitSubmit), // primary
+                    v.Q<ToolbarMenu>(UiNames.BranchMenu),
+                };
+                Assert.That(controls[1].ClassListContains("ed-button--primary"), Is.True, "setup: Commit is a primary button");
+
+                window.ResolveStylesAndLayout();
+                foreach (var control in controls) AssertIconReadsLikeLabel(control);
+
+                foreach (var control in controls) control.SetEnabled(!control.enabledSelf);
+                window.ResolveStylesAndLayout();
+                foreach (var control in controls) AssertIconReadsLikeLabel(control);
+            }
+        }
+
+        static void AssertIconReadsLikeLabel(VisualElement control)
+        {
+            var icon = control.Q<Image>();
+            var label = control.Children().OfType<TextElement>().Single();
+            var state = $"{control.name} ({(control.enabledInHierarchy ? "enabled" : "disabled")})";
+            Assert.That(icon.tintColor, Is.EqualTo(label.resolvedStyle.color), state + ": icon tint = label colour");
+            Assert.That(icon.resolvedStyle.opacity, Is.EqualTo(label.resolvedStyle.opacity), state + ": icon opacity = label opacity");
+            if (control.enabledInHierarchy)
+                Assert.That(control.resolvedStyle.opacity, Is.EqualTo(1f), state + ": not faded");
+            else
+                Assert.That(control.resolvedStyle.opacity, Is.LessThan(1f), state + ": faded, icon and label together");
         }
 
         [Test] public async Task PanelButtons_HaveIcons()

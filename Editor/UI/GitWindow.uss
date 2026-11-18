@@ -57,7 +57,9 @@
 /* Action icons: white PNGs (GitIcons) tinted like the text they sit before. Button.iconImage puts an
    Image.unity-button__image before the button's text; GitIcons puts an Image.unitygit-icon before a menu's text.
    The tints follow the kit's button text colours, in the kit's order: text, muted when disabled, on-accent on
-   primary buttons. */
+   primary buttons (the kit keeps a disabled primary button's text on-accent, and its menu text unchanged).
+   A disabled control is faded by Unity's theme (0.5 opacity on the whole control), so the icon fades with its
+   label. IconTests.IconTint_ReadsLikeLabel_EnabledAndDisabled checks this with resolved styles. */
 
 .unitygit-window .unity-button.unity-button--with-icon {
     flex-direction: row;
