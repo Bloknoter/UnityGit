@@ -60,15 +60,16 @@ namespace UnityGit.UI
             var toolbar = EditorUiElements.Toolbar();
             toolbar.name = UiNames.Toolbar;
             _branchMenu = new ToolbarMenu { name = UiNames.BranchMenu };
-            _commitButton = ToolbarAction(UiNames.CommitButton, "Commit", () => SelectTab(WindowTab.Changes));
-            _fetchButton = ToolbarAction(UiNames.FetchButton, "Fetch", () => _ = _session.FetchAsync());
-            _pullButton = ToolbarAction(UiNames.PullButton, "Pull", () => _ = _session.PullAsync());
-            _pushButton = ToolbarAction(UiNames.PushButton, "Push", () => _ = _session.PushAsync());
+            GitIcons.Apply(_branchMenu, GitIcon.Branch);
+            _commitButton = ToolbarAction(UiNames.CommitButton, "Commit", GitIcon.Commit, () => SelectTab(WindowTab.Changes));
+            _fetchButton = ToolbarAction(UiNames.FetchButton, "Fetch", GitIcon.Fetch, () => _ = _session.FetchAsync());
+            _pullButton = ToolbarAction(UiNames.PullButton, "Pull", GitIcon.Pull, () => _ = _session.PullAsync());
+            _pushButton = ToolbarAction(UiNames.PushButton, "Push", GitIcon.Push, () => _ = _session.PushAsync());
             _progress = new Label { name = UiNames.Progress };
             _progress.AddToClassList(EditorUiClasses.Muted);
             _progress.AddToClassList(EditorUiClasses.Small);
-            _refreshButton = ToolbarAction(UiNames.RefreshButton, "Refresh", () => _ = _session.RefreshAsync(true));
-            _cancelButton = ToolbarAction(UiNames.CancelButton, "Cancel", _session.Cancel);
+            _refreshButton = ToolbarAction(UiNames.RefreshButton, "Refresh", GitIcon.Refresh, () => _ = _session.RefreshAsync(true));
+            _cancelButton = ToolbarAction(UiNames.CancelButton, "Cancel", GitIcon.Cancel, _session.Cancel);
             toolbar.Add(_branchMenu);
             toolbar.Add(_commitButton);
             toolbar.Add(_fetchButton);
@@ -244,6 +245,7 @@ namespace UnityGit.UI
 
                 case RepoAvailability.NotARepository:
                     var init = Primary(new Button(() => _ = _session.InitAsync()) { name = UiNames.InitButton, text = "Git init" });
+                    GitIcons.Apply(init, GitIcon.Init);
                     _body.Add(StateCard(StateMessage(new Label("This project is not in a git repository") { name = UiNames.NotRepo }), init));
                     return () => ApplyAvailability(init, GitAction.Init);
 
@@ -338,9 +340,13 @@ namespace UnityGit.UI
             element.tooltip = availability.Reason ?? string.Empty;
         }
 
-        // Kit buttons rather than ToolbarButtons, which are drawn for Unity's flat toolbar strip.
-        static Button ToolbarAction(string name, string text, Action onClick)
-            => new Button(onClick) { name = name, text = text };
+        // Kit buttons rather than ToolbarButtons, which are drawn for Unity's flat toolbar strip. The icon sits before the text.
+        static Button ToolbarAction(string name, string text, GitIcon icon, Action onClick)
+        {
+            var button = new Button(onClick) { name = name, text = text };
+            GitIcons.Apply(button, icon);
+            return button;
+        }
 
         static Button Primary(Button button)
         {

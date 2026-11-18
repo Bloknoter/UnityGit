@@ -54,6 +54,37 @@
     -unity-text-align: middle-right;
 }
 
+/* Action icons: white PNGs (GitIcons) tinted like the text they sit before. Button.iconImage puts an
+   Image.unity-button__image before the button's text; GitIcons puts an Image.unitygit-icon before a menu's text.
+   The tints follow the kit's button text colours, in the kit's order: text, muted when disabled, on-accent on
+   primary buttons. */
+
+.unitygit-window .unity-button.unity-button--with-icon {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+}
+
+.unitygit-window .unity-button > .unity-button__image,
+.unitygit-window .unitygit-icon {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    margin-left: 0;
+    margin-right: var(--ed-space-1);
+    margin-top: 0;
+    margin-bottom: 0;
+    --unity-image-tint-color: var(--ed-text);
+}
+
+.unitygit-window .unity-button:disabled > .unity-button__image {
+    --unity-image-tint-color: var(--ed-text-muted);
+}
+
+.unitygit-window .unity-button.ed-button--primary > .unity-button__image {
+    --unity-image-tint-color: var(--ed-text-on-accent);
+}
+
 /* Outcome: a kit message whose text column also holds the conflicts and Details foldouts. */
 
 .unitygit-outcome-content {
@@ -321,6 +352,29 @@
     flex-grow: 0;
     flex-shrink: 0;
     flex-basis: 80px;
+}
+
+/* Changes: the header row, a kit table header lined up with the rows below it: the same side padding and Toggle,
+   then "File" where the kind badge starts, and the summary on the right. */
+
+.unitygit-window .unitygit-changes-header {
+    flex-shrink: 0;
+    padding-left: var(--ed-space-2);
+    padding-right: var(--ed-space-2);
+}
+
+.unitygit-window .unitygit-changes-file {
+    flex-grow: 1;
+    flex-shrink: 1;
+    margin-left: var(--ed-space-1);
+    padding-left: 0;
+    -unity-text-align: middle-left;
+}
+
+.unitygit-window .unitygit-changes-summary {
+    flex-shrink: 0;
+    padding-right: 0;
+    -unity-text-align: middle-right;
 }
 
 /* Changes: the commit card */

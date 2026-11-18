@@ -30,7 +30,9 @@ namespace UnityGit.UI
 
             _locksCard = _locks.InCard("LFS locks");
             _locksCard.Insert(0, _locksNotLoaded);
-            _locksCard.Header.Add(new Button(() => _ = _session.RefreshAsync(true)) { name = UiNames.LocksRefresh, text = "Refresh locks" });
+            var refreshLocks = new Button(() => _ = _session.RefreshAsync(true)) { name = UiNames.LocksRefresh, text = "Refresh locks" };
+            GitIcons.Apply(refreshLocks, GitIcon.Lock);
+            _locksCard.Header.Add(refreshLocks);
             Add(_locksCard);
 
             // SessionProvider reads this preference on the session's next change, so a toggle applies from then on.

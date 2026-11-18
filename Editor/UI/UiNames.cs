@@ -25,6 +25,9 @@ namespace UnityGit.UI
         public const string OverviewLfs = "unitygit-overview-lfs";
         public const string LfsSetupButton = "unitygit-lfs-setup";
         public const string ChangesList = "unitygit-changes-list";
+        public const string ChangesHeader = "unitygit-changes-header";
+        public const string ChangesTickAll = "unitygit-changes-tick-all";
+        public const string ChangesSummary = "unitygit-changes-summary";
         public const string CommitMessage = "unitygit-commit-message";
         public const string CommitSubmit = "unitygit-commit-submit";
         public const string LocalBranches = "unitygit-local-branches";

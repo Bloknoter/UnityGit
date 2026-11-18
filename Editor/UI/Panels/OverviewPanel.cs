@@ -68,6 +68,7 @@ namespace UnityGit.UI
             _lfsCard.Header.Add(_lfs);
             _lfsSetup = new Button(() => _ = _session.SetUpLfsAsync()) { name = UiNames.LfsSetupButton, text = "Set up LFS" };
             _lfsSetup.AddToClassList(EditorUiClasses.ButtonPrimary);
+            GitIcons.Apply(_lfsSetup, GitIcon.Lfs);
             scroll.Add(_lfsCard);
             Render();
         }

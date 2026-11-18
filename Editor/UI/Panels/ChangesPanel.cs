@@ -3,29 +3,53 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
+using UnityEngine;
 using UnityEngine.UIElements;
 using UnityGit.UI.Theme;
 
 namespace UnityGit.UI
 {
+    /// <summary>
+    /// The change list, under a header with a tick-all checkbox and a "{ticked} of {rows} to commit" summary, and the
+    /// commit card. Ticks decide what is committed. The list's selection (click, Ctrl+click, Shift+click) only decides
+    /// which rows a checkbox click or Space applies to.
+    /// </summary>
     internal sealed class ChangesPanel : VisualElement, IRenderablePanel
     {
         readonly GitSession _session;
         readonly ListView _list;
+        readonly Toggle _tickAll;
+        readonly Label _summary;
         readonly TextField _message;
         readonly Button _submit;
 
         // Unticked rather than ticked rows, so rows that appear later default to ticked.
         readonly HashSet<string> _unticked = new HashSet<string>(StringComparer.Ordinal);
-        List<ChangeItem> _items = new List<ChangeItem>();
+        // Selected rows by path, so the selection follows its rows when a refresh adds or removes others.
+        readonly HashSet<string> _selected = new HashSet<string>(StringComparer.Ordinal);
+        readonly List<ChangeItem> _items = new List<ChangeItem>();
         Dictionary<string, ChangeItem> _byPath = new Dictionary<string, ChangeItem>(StringComparer.Ordinal);
         List<string> _rows = new List<string>();
         bool _merging;
+        bool _syncingSelection; // set while the panel moves the list's selection itself, so that isn't read back
 
         public ChangesPanel(GitSession session)
         {
             _session = session;
             AddToClassList(PanelClasses.Content);
+
+            // A table header lined up with the rows: the checkbox column, then "File", and the summary on the right.
+            var header = new VisualElement { name = UiNames.ChangesHeader };
+            header.AddToClassList(EditorUiClasses.TableRow);
+            header.AddToClassList(EditorUiClasses.TableHeader);
+            header.AddToClassList("unitygit-changes-header");
+            _tickAll = new Toggle { name = UiNames.ChangesTickAll };
+            _tickAll.RegisterValueChangedCallback(_ => SetAllTicked(AllTicked != true)); // from mixed or none, ticks all
+            header.Add(_tickAll);
+            header.Add(PanelParts.Text("File", EditorUiClasses.TableHeaderCell, "unitygit-changes-file"));
+            _summary = PanelParts.Text(null, EditorUiClasses.TableHeaderCell, "unitygit-changes-summary");
+            _summary.name = UiNames.ChangesSummary;
+            header.Add(_summary);
 
             _list = new ListView
             {
@@ -33,13 +57,17 @@ namespace UnityGit.UI
                 fixedItemHeight = 24,
                 showBorder = false,
                 showAlternatingRowBackgrounds = AlternatingRowBackground.ContentOnly,
-                selectionType = SelectionType.None,
+                selectionType = SelectionType.Multiple,
                 itemsSource = _items,
                 makeItem = () => new ChangeRow(this),
                 bindItem = BindRow,
             };
             _list.AddToClassList(PanelClasses.List);
-            Add(PanelParts.ListCard(null, _list));
+            _list.selectedIndicesChanged += _ => ReadListSelection();
+            _list.RegisterCallback<KeyDownEvent>(OnListKeyDown);
+            var listCard = PanelParts.ListCard(null, _list);
+            listCard.Insert(0, header);
+            Add(listCard);
 
             var commitCard = EditorUiElements.Card();
             commitCard.AddToClassList("unitygit-commit-card");
@@ -50,6 +78,7 @@ namespace UnityGit.UI
 
             _submit = new Button(() => _ = SubmitCommitAsync()) { name = UiNames.CommitSubmit, text = "Commit" };
             _submit.AddToClassList(EditorUiClasses.ButtonPrimary);
+            GitIcons.Apply(_submit, GitIcon.Commit);
             var actions = new VisualElement();
             actions.AddToClassList("unitygit-commit-actions");
             actions.Add(_submit);
@@ -61,6 +90,26 @@ namespace UnityGit.UI
         /// <summary>Paths of the rows currently listed.</summary>
         internal IReadOnlyList<string> Rows => _rows;
 
+        /// <summary>Paths of the selected rows, in list order.</summary>
+        internal IReadOnlyList<string> SelectedRows => _rows.Where(_selected.Contains).ToList();
+
+        /// <summary>True when every row that can be ticked is ticked, false when none is, null when mixed or none can be.</summary>
+        internal bool? AllTicked
+        {
+            get
+            {
+                int tickable = 0, ticked = 0;
+                foreach (var row in _rows)
+                {
+                    if (!IsTickable(row)) continue;
+                    tickable++;
+                    if (IsTicked(row)) ticked++;
+                }
+                if (tickable == 0 || (ticked > 0 && ticked < tickable)) return null;
+                return ticked == tickable;
+            }
+        }
+
         internal bool IsTicked(string rowPath)
         {
             if (_byPath.TryGetValue(rowPath, out var row) && row.IsConflicted) return false;
@@ -68,13 +117,36 @@ namespace UnityGit.UI
         }
 
         /// <summary>Ignored for conflicted rows and during a merge, where every row is committed.</summary>
-        internal void SetTicked(string rowPath, bool ticked)
+        internal void SetTicked(string rowPath, bool ticked) => SetTickedRows(new[] { rowPath }, ticked);
+
+        /// <summary>Ticks or unticks every row, skipping the ones <see cref="SetTicked"/> ignores.</summary>
+        internal void SetAllTicked(bool ticked) => SetTickedRows(_rows, ticked);
+
+        /// <summary>
+        /// What a row's checkbox calls: on a selected row the value applies to every selected row, on any other row only
+        /// to that row.
+        /// </summary>
+        internal void ToggleRow(string rowPath, bool ticked)
+            => SetTickedRows(_selected.Contains(rowPath) ? SelectedRows : new[] { rowPath }, ticked);
+
+        /// <summary>
+        /// What Space calls: ticks every selected row if any of them is unticked, otherwise unticks them all. Rows that
+        /// can't be ticked are left out of both the check and the change.
+        /// </summary>
+        internal void ToggleSelection()
         {
-            if (_merging || (_byPath.TryGetValue(rowPath, out var row) && row.IsConflicted)) return;
-            var changed = ticked ? _unticked.Remove(rowPath) : _unticked.Add(rowPath);
-            if (!changed) return;
-            _list.RefreshItems();
-            UpdateSubmit();
+            var rows = SelectedRows.Where(IsTickable).ToList();
+            if (rows.Count == 0) return;
+            SetTickedRows(rows, rows.Any(r => !IsTicked(r)));
+        }
+
+        /// <summary>Selects these rows, in place of the current selection. Paths that aren't listed are ignored.</summary>
+        internal void Select(IEnumerable<string> rowPaths)
+        {
+            _selected.Clear();
+            foreach (var path in rowPaths)
+                if (_byPath.ContainsKey(path)) _selected.Add(path);
+            ShowSelection();
         }
 
         internal async Task<ActionOutcome> SubmitCommitAsync()
@@ -94,14 +166,16 @@ namespace UnityGit.UI
         {
             var s = _session.Snapshot;
             _merging = s.Operation == RepoOperation.Merging;
-            _items = s.Changes.ToList();
+            _items.Clear();
+            _items.AddRange(s.Changes);
             _byPath = new Dictionary<string, ChangeItem>(_items.Count, StringComparer.Ordinal);
             foreach (var item in _items) _byPath[item.Path] = item;
             _rows = _items.Select(i => i.Path).ToList();
             _unticked.RemoveWhere(p => !_byPath.ContainsKey(p)); // a row that returns later should default to ticked
-            _list.itemsSource = _items;
-            _list.RefreshItems();
+            _selected.RemoveWhere(p => !_byPath.ContainsKey(p));
+            RefreshRows();
             UpdateSubmit();
+            UpdateHeader();
         }
 
         /// <summary>The badge tone for a change kind: additions green, edits blue, removals and conflicts red, moves accent.</summary>
@@ -123,6 +197,89 @@ namespace UnityGit.UI
             }
         }
 
+        bool IsTickable(string rowPath)
+            => !_merging && !(_byPath.TryGetValue(rowPath, out var row) && row.IsConflicted);
+
+        // Applies the tick rules to each row, then refreshes the list once for the whole batch.
+        void SetTickedRows(IEnumerable<string> rowPaths, bool ticked)
+        {
+            var changed = false;
+            foreach (var path in rowPaths)
+            {
+                if (!IsTickable(path)) continue;
+                changed |= ticked ? _unticked.Remove(path) : _unticked.Add(path);
+            }
+            if (!changed) return;
+            RefreshRows();
+            UpdateSubmit();
+            UpdateHeader();
+        }
+
+        // Rebinds the visible rows, then puts the list's selection back on the selected paths, whose indices may have moved.
+        void RefreshRows()
+        {
+            _syncingSelection = true;
+            try
+            {
+                _list.RefreshItems();
+                _list.SetSelectionWithoutNotify(SelectedIndices());
+            }
+            finally
+            {
+                _syncingSelection = false;
+            }
+        }
+
+        void ShowSelection()
+        {
+            _syncingSelection = true;
+            try
+            {
+                _list.SetSelectionWithoutNotify(SelectedIndices());
+            }
+            finally
+            {
+                _syncingSelection = false;
+            }
+        }
+
+        List<int> SelectedIndices()
+        {
+            var indices = new List<int>(_selected.Count);
+            for (var i = 0; i < _rows.Count; i++)
+                if (_selected.Contains(_rows[i])) indices.Add(i);
+            return indices;
+        }
+
+        // The user changed the list's selection (click, Ctrl+click, Shift+click, arrows, Ctrl+A).
+        void ReadListSelection()
+        {
+            if (_syncingSelection) return;
+            _selected.Clear();
+            foreach (var i in _list.selectedIndices)
+                if (i >= 0 && i < _rows.Count) _selected.Add(_rows[i]);
+        }
+
+        void OnListKeyDown(KeyDownEvent e)
+        {
+            if (e.keyCode != KeyCode.Space) return;
+            ToggleSelection();
+            e.StopPropagation();
+        }
+
+        void UpdateHeader()
+        {
+            var anyTickable = _rows.Any(IsTickable);
+            var all = AllTicked;
+            _tickAll.SetEnabled(anyTickable);
+            // During a merge every row is locked in, so the box shows ticked (and disabled).
+            _tickAll.SetValueWithoutNotify(all == true || (_merging && _rows.Count > 0));
+            _tickAll.showMixedValue = anyTickable && all == null;
+            _summary.text = _rows.Count == 0
+                ? "No changes"
+                : $"{PanelParts.Count(_rows.Count(IsTicked))} of {PanelParts.Count(_rows.Count)} to commit";
+        }
+
         void UpdateSubmit()
         {
             var availability = _session.GetAvailability(GitAction.Commit);
@@ -138,7 +295,7 @@ namespace UnityGit.UI
             var item = _items[index];
             row.userData = item.Path;
             row.Tick.SetValueWithoutNotify(IsTicked(item.Path));
-            row.Tick.SetEnabled(!item.IsConflicted && !_merging);
+            row.Tick.SetEnabled(IsTickable(item.Path));
             EditorUiElements.SetBadge(row.Kind, BadgeText(item.Kind), KindTone(item.Kind));
             row.Kind.tooltip = item.Kind.ToString();
             row.Path.text = item.Path;
@@ -173,9 +330,13 @@ namespace UnityGit.UI
             {
                 AddToClassList(PanelClasses.Row);
                 Kind.AddToClassList("unitygit-kind-badge");
+                // Not focusable, so Space always reaches the list (ToggleSelection) instead of also toggling a focused box.
+                // A click still works: the box's Clickable handles it and stops the pointer events there, so the list's
+                // selection is left as it was and ToggleRow sees it.
+                Tick.focusable = false;
                 Tick.RegisterValueChangedCallback(e =>
                 {
-                    if (userData is string path) panel.SetTicked(path, e.newValue);
+                    if (userData is string path) panel.ToggleRow(path, e.newValue);
                 });
                 Add(Tick);
                 Add(Kind);
