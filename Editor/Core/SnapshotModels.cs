@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace UnityGit
 {
-    public enum RepoAvailability { Unknown, Ready, NotARepository, GitMissing }
+    public enum RepoAvailability { Unknown, Ready, NotARepository, GitMissing, Unavailable }
     public enum RepoOperation { None, Merging, Rebasing, CherryPicking, Reverting, Bisecting }
     public enum ChangeKind { Modified, Added, Deleted, Renamed, Copied, TypeChanged, Untracked, Conflicted }
 

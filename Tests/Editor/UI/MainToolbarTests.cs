@@ -71,6 +71,18 @@ namespace UnityGit.Tests
             Assert.That(MainToolbarButtons.CreatePush(s).content.tooltip, Is.EqualTo("This project is not in a git repository"));
         }
 
+        [Test] public async Task Unavailable_AllDisabled_BranchSaysNoRepository()
+        {
+            var repo = await _sb.InitRepoAsync("p");
+            await repo.Config.SetAsync("core.repositoryformatversion", "99");
+            var s = _sb.CreateSession(repo.WorkingDirectory, new FakeEditorHooks());
+            await s.RefreshAsync();
+
+            Assert.That(AllElements(s).Select(e => e.enabled), Is.All.False);
+            Assert.That(MainToolbarButtons.CreateBranch(s).content.text, Is.EqualTo("No repository"));
+            Assert.That(MainToolbarButtons.CreatePush(s).content.tooltip, Is.EqualTo("Git can't open this repository"));
+        }
+
         [Test] public async Task Busy_DisablesElements()
         {
             var trio = await _sb.CreateTrioAsync();

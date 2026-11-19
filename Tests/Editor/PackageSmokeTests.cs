@@ -11,11 +11,13 @@ namespace UnityGit.Tests
             => Assert.That(typeof(FlexGit.GitRepository).Assembly.GetName().Name, Is.EqualTo("FlexGit"));
 
         [Test]
-        public void Package_IsEmbedded_AndDeclaresFlexGit()
+        public void Package_IsEmbeddedOrGit_AndDeclaresFlexGit()
         {
+            // Embedded in the host project; installed from a git URL in a project that opts into the package's tests.
             var info = UnityEditor.PackageManager.PackageInfo.FindForAssetPath("Packages/com.bloknoter.unitygit/package.json");
             Assert.That(info, Is.Not.Null);
-            Assert.That(info.source, Is.EqualTo(UnityEditor.PackageManager.PackageSource.Embedded));
+            Assert.That(info.source, Is.EqualTo(UnityEditor.PackageManager.PackageSource.Embedded)
+                .Or.EqualTo(UnityEditor.PackageManager.PackageSource.Git));
             Assert.That(info.dependencies.Select(d => d.name), Contains.Item("com.bloknoter.flexgit"));
         }
 

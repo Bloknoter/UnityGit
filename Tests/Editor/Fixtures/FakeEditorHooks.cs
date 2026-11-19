@@ -11,13 +11,14 @@ namespace UnityGit.Tests
         public bool ConfirmScenesResult { get; set; } = true;
         public Action? OnSaveAssets { get; set; }
         public Action? OnBeginGitOperation { get; set; }
+        public Action? OnEndGitOperation { get; set; }
 
         public int Count(string call) => Calls.Count(c => c == call);
 
         public void SaveAssets() { Calls.Add("SaveAssets"); OnSaveAssets?.Invoke(); }
         public bool ConfirmSaveModifiedScenes() { Calls.Add("ConfirmScenes"); return ConfirmScenesResult; }
         public void BeginGitOperation() { Calls.Add("Begin"); OnBeginGitOperation?.Invoke(); }
-        public void EndGitOperation() => Calls.Add("End");
+        public void EndGitOperation() { Calls.Add("End"); OnEndGitOperation?.Invoke(); }
         public void RefreshAssets() => Calls.Add("RefreshAssets");
     }
 }

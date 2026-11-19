@@ -19,6 +19,7 @@ namespace UnityGit.UI
                 case RepoAvailability.Ready:
                     return s.IsDetached ? $"Detached at {ShortSha(s.HeadSha)}" : s.Branch ?? string.Empty;
                 case RepoAvailability.NotARepository:
+                case RepoAvailability.Unavailable:
                     return "No repository";
                 case RepoAvailability.GitMissing:
                     return "Git missing";

@@ -242,6 +242,32 @@ namespace UnityGit.Tests
             Assert.That((await repo.History.GetCommitAsync("HEAD"))!.IsMerge, Is.True);
         }
 
+        // Spec 6.3: a rebase stopped mid-way (its conflict resolved, so only the rebase rule applies) refuses Commit.
+        [Test] public async Task Commit_DuringRebase_Refused()
+        {
+            var repo = await _sb.InitRepoAsync("p");
+            await GitSandbox.CommitFileAsync(repo, "README.md", "base", "initial");
+            Ok(await repo.RunRawAsync("checkout", "-b", "other"));
+            await GitSandbox.CommitFileAsync(repo, "README.md", "other line", "other edit");
+            Ok(await repo.RunRawAsync("checkout", "main"));
+            await GitSandbox.CommitFileAsync(repo, "README.md", "main line", "main edit");
+            Ok(await repo.RunRawAsync("checkout", "other"));
+            var rebase = await repo.RunRawAsync("rebase", "main");
+            Assert.That(rebase.ExitCode, Is.Not.EqualTo(0), "setup: the rebase stops on the conflict");
+            GitSandbox.WriteFile(repo, "README.md", "resolved");
+            Ok(await repo.RunRawAsync("add", "README.md"));
+            var s = _sb.CreateSession(repo.WorkingDirectory, new FakeEditorHooks());
+            await s.RefreshAsync();
+            Assert.That((s.Snapshot.Operation, s.Snapshot.HasConflicts), Is.EqualTo((RepoOperation.Rebasing, false)), "setup");
+            Assert.That(Rows(s), Is.EqualTo(new[] { "README.md" }), "setup");
+            var head = await Head(repo);
+
+            var o = await s.CommitAsync("rebase", Rows(s), Rows(s));
+
+            Assert.That((o.Kind, o.Message), Is.EqualTo((OutcomeKind.Refused, "Finish or abort the rebase outside UnityGit")));
+            Assert.That(await Head(repo), Is.EqualTo(head));
+        }
+
         [Test] public async Task Commit_PathWithSpacesAndCyrillic_IsCommitted()
         {
             const string scene = "Assets/Мои сцены/Level 1.unity";

@@ -23,8 +23,15 @@ namespace UnityGit
         }
 
         public static ActionOutcome FromError(GitAction action, GitError error)
-            => new ActionOutcome(action, OutcomeKind.Failed, ForErrorKind(error.Kind, error.Message),
-                string.IsNullOrEmpty(error.StandardError) ? null : error.StandardError);
+            => new ActionOutcome(action, OutcomeKind.Failed, ForErrorKind(error.Kind, error.Message), Details(error));
+
+        /// <summary>An outcome's Details: git's error output, or null when there is none.</summary>
+        public static string? Details(GitError? error)
+            => error == null || string.IsNullOrEmpty(error.StandardError) ? null : error.StandardError;
+
+        /// <summary>Git's own explanation of a failure: its full error output, which often ends with how to fix it.</summary>
+        public static string GitsWords(GitError error)
+            => string.IsNullOrWhiteSpace(error.StandardError) ? error.Message : error.StandardError.Trim();
 
         public static string Files(int n) => n == 1 ? "1 file" : $"{n} files";
     }

@@ -49,6 +49,20 @@ namespace UnityGit.Tests
             Assert.That(s.Snapshot.Ahead, Is.EqualTo(0));
         }
 
+        // The push works but the refresh after it fails, so the snapshot still has no upstream to name.
+        [Test] public async Task Push_RefreshFailsAfterPush_SaysPushed()
+        {
+            var (trio, s, hooks) = await CreateAsync();
+            await SwitchCreate(trio.Local, "feature");
+            await GitSandbox.CommitFileAsync(trio.Local, "f.txt", "f", "feature work");
+            await s.RefreshAsync();
+            hooks.OnEndGitOperation = () => System.IO.File.WriteAllText(System.IO.Path.Combine(trio.Local.GitDirectory, "index"), "garbage");
+
+            var outcome = await s.PushAsync();
+
+            Assert.That((outcome.Kind, outcome.Message), Is.EqualTo((OutcomeKind.Succeeded, "Pushed")));
+        }
+
         [Test] public async Task Push_Normal_ClearsAhead()
         {
             var (trio, s, _) = await CreateAsync();

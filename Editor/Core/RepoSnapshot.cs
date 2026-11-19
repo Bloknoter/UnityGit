@@ -49,5 +49,9 @@ namespace UnityGit
 
         public static RepoSnapshot GitMissing(string projectPath, string message)
             => new RepoSnapshot { Availability = RepoAvailability.GitMissing, ProjectPath = projectPath, Message = message };
+
+        /// <summary>A repository git can't open or read; <see cref="Message"/> is git's own explanation.</summary>
+        public static RepoSnapshot Unavailable(string projectPath, string message)
+            => new RepoSnapshot { Availability = RepoAvailability.Unavailable, ProjectPath = projectPath, Message = message };
     }
 }

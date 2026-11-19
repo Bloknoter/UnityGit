@@ -117,7 +117,7 @@ namespace UnityGit.UI
             }
             foreach (var remote in s.Remotes)
                 _remotes.Add(PanelParts.Field(remote.Name,
-                    Selectable(PanelParts.Text(remote.FetchUrl, EditorUiClasses.Mono, EditorUiClasses.Small, PanelClasses.Value))));
+                    Selectable(PanelParts.Text(PanelParts.WithoutCredentials(remote.FetchUrl), EditorUiClasses.Mono, EditorUiClasses.Small, PanelClasses.Value))));
         }
 
         static string StateText(RepoSnapshot s)

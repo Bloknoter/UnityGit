@@ -14,7 +14,8 @@ namespace UnityGit
     {
         internal const int RecentCommitLimit = 50;
 
-        public static async Task<RepoSnapshot> LoadAsync(GitRepository repo, string projectPath, bool includeLfsLocks, CancellationToken ct, Action<string>? log = null)
+        // warn is told when the LFS lock list fails to load; the rest of the snapshot still loads.
+        public static async Task<RepoSnapshot> LoadAsync(GitRepository repo, string projectPath, bool includeLfsLocks, CancellationToken ct, Action<string>? warn = null)
         {
             var status = await repo.GetStatusAsync(null, ct).ConfigureAwait(false);
             var snapshot = new RepoSnapshot
@@ -32,11 +33,11 @@ namespace UnityGit
                 Operation = ToOperation(repo.GetState()),
                 Changes = ToChanges(status),
             };
-            await LoadDetailsAsync(snapshot, repo, status.IsUnborn, includeLfsLocks, log, ct).ConfigureAwait(false);
+            await LoadDetailsAsync(snapshot, repo, status.IsUnborn, includeLfsLocks, warn, ct).ConfigureAwait(false);
             return snapshot;
         }
 
-        static async Task LoadDetailsAsync(RepoSnapshot snapshot, GitRepository repo, bool unborn, bool includeLfsLocks, Action<string>? log, CancellationToken ct)
+        static async Task LoadDetailsAsync(RepoSnapshot snapshot, GitRepository repo, bool unborn, bool includeLfsLocks, Action<string>? warn, CancellationToken ct)
         {
             snapshot.LocalBranches = (await repo.Branches.ListAsync(BranchScope.Local, ct).ConfigureAwait(false))
                 .Select(ToBranchItem).ToList();
@@ -86,7 +87,7 @@ namespace UnityGit
                 }
                 catch (GitCommandException ex)
                 {
-                    log?.Invoke(ex.Message);
+                    warn?.Invoke($"Loading LFS locks failed: {ex.Message}");
                 }
             }
         }

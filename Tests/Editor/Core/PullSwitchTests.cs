@@ -129,6 +129,22 @@ namespace UnityGit.Tests
             Assert.That(outcome.Message, Is.EqualTo("Can't fast-forward — your branch and the remote have diverged"));
         }
 
+        // git names the blocking files in its error output; the outcome's Details carry it.
+        [Test] public async Task Pull_LocalChangesBlocked_ListsFilesInDetails()
+        {
+            var (trio, s, _) = await CreateAsync();
+            await TeammatePushesAsync(trio, "README.md", "teammate line");
+            GitSandbox.WriteFile(trio.Local, "README.md", "mine");
+            await s.RefreshAsync();
+
+            var outcome = await s.PullAsync();
+
+            Assert.That(outcome.Kind, Is.EqualTo(OutcomeKind.Failed));
+            Assert.That(outcome.Message, Is.EqualTo("Pull blocked: your local changes would be overwritten — commit or stash them first"));
+            Assert.That(outcome.Details ?? "(no details)", Does.Contain("README.md"));
+            Assert.That(File.ReadAllText(Path.Combine(trio.Local.WorkingDirectory, "README.md")), Is.EqualTo("mine"));
+        }
+
         [Test] public async Task Pull_ScenesDeclined_NothingPulled()
         {
             var (trio, s, hooks) = await CreateAsync();
@@ -231,6 +247,7 @@ namespace UnityGit.Tests
 
             Assert.That(outcome.Kind, Is.EqualTo(OutcomeKind.Failed));
             Assert.That(outcome.Message, Is.EqualTo("Switch blocked: your local changes would be overwritten — commit or stash them first"));
+            Assert.That(outcome.Details ?? "(no details)", Does.Contain("README.md"));
             Assert.That(File.ReadAllText(Path.Combine(trio.Local.WorkingDirectory, "README.md")), Is.EqualTo("mine"));
             Assert.That(s.Snapshot.Branch, Is.EqualTo("main"));
             Assert.That(hooks.Count("RefreshAssets"), Is.EqualTo(0));

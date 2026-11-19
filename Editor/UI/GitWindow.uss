@@ -108,7 +108,7 @@
     white-space: normal;
 }
 
-/* Body: a centred card for No repository / Git missing / Loading, else the nav and the panel. */
+/* Body: a centred card for No repository / Git missing / Git can't open it / Loading, else the nav and the panel. */
 
 .unitygit-body {
     flex-grow: 1;
@@ -133,6 +133,12 @@
     white-space: normal;
     font-size: var(--ed-font-l);
     margin-bottom: var(--ed-space-3);
+    padding-left: 0;
+    padding-right: 0;
+}
+
+.unitygit-state-details {
+    white-space: normal;
     padding-left: 0;
     padding-right: 0;
 }

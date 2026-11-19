@@ -34,6 +34,7 @@ namespace UnityGit
             if (isBusy) return "Another git action is running";
             if (s.Availability == RepoAvailability.Unknown) return "Loading…";
             if (s.Availability == RepoAvailability.GitMissing) return s.Message ?? string.Empty;
+            if (s.Availability == RepoAvailability.Unavailable) return "Git can't open this repository";
 
             if (action == GitAction.Init)
             {

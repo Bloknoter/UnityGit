@@ -39,6 +39,23 @@ namespace UnityGit.UI
 
         public static string Count(int n) => n.ToString(CultureInfo.InvariantCulture);
 
+        static readonly char[] AuthorityEnd = { '/', '?', '#' };
+
+        /// <summary>
+        /// A remote URL without its user info, so no credential reaches the screen: <c>https://user:token@host/repo</c>
+        /// shows as <c>https://host/repo</c>. scp-style URLs (<c>git@host:repo</c>) and paths have none and are unchanged.
+        /// </summary>
+        public static string WithoutCredentials(string url)
+        {
+            var scheme = url.IndexOf("://", StringComparison.Ordinal);
+            if (scheme < 0) return url;
+            var authority = scheme + 3;
+            var authorityEnd = url.IndexOfAny(AuthorityEnd, authority);
+            if (authorityEnd < 0) authorityEnd = url.Length;
+            var at = url.LastIndexOf('@', authorityEnd - 1, authorityEnd - authority);
+            return at < 0 ? url : url.Substring(0, authority) + url.Substring(at + 1);
+        }
+
         public static void SetDisplayed(VisualElement element, bool displayed)
             => element.style.display = displayed ? DisplayStyle.Flex : DisplayStyle.None;
 

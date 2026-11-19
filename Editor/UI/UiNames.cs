@@ -18,6 +18,8 @@ namespace UnityGit.UI
         public const string InitButton = "unitygit-init-button";
         public const string NotRepo = "unitygit-not-repo";
         public const string GitMissing = "unitygit-git-missing";
+        public const string Unavailable = "unitygit-unavailable";
+        public const string UnavailableMessage = "unitygit-unavailable-message";
         public const string Nav = "unitygit-nav";
         public const string PanelHost = "unitygit-panel";
         public const string OverviewBranch = "unitygit-overview-branch";

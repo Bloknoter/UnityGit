@@ -67,6 +67,44 @@ namespace UnityGit.Tests
             Assert.That(v.Q<Label>(UiNames.GitMissing).text, Is.EqualTo("Git isn't installed or wasn't found — install Git 2.32 or newer"));
         }
 
+        // git refuses the repo: the window shows git's reason (with its own fix) and offers neither Git init nor Download Git.
+        [Test] public async Task Unavailable_ShowsGitsMessage_WithoutInit()
+        {
+            var repo = await _sb.InitRepoAsync("p");
+            await repo.Config.SetAsync("core.repositoryformatversion", "99");
+            var s = _sb.CreateSession(repo.WorkingDirectory, new FakeEditorHooks());
+            await s.RefreshAsync();
+
+            var v = new GitWindowView(s);
+
+            Assert.That(v.Q<Label>(UiNames.Unavailable)?.text, Is.EqualTo("Git can't open this repository"));
+            Assert.That(v.Q<Label>(UiNames.UnavailableMessage)?.text, Does.Contain("Expected git repo version <= 1"));
+            Assert.That(v.Q<Button>(UiNames.InitButton), Is.Null);
+            Assert.That(v.Query<Button>().Where(b => b.text == "Download Git").ToList(), Is.Empty);
+            Assert.That(v.Q<ToolbarMenu>(UiNames.BranchMenu).text, Is.EqualTo("No repository"));
+        }
+
+        // Spec 5.4: the toolbar's Refresh stays local. Only "Refresh locks" asks git-lfs for the lock list (a server call).
+        [Test] public async Task RefreshButton_DoesNotLoadLfsLocks()
+        {
+            var trio = await _sb.CreateTrioAsync();
+            if (!trio.Local.Lfs.IsInstalled) Assert.Ignore("git-lfs not installed");
+            GitSandbox.WriteFile(trio.Local, ".gitattributes", "*.psd filter=lfs diff=lfs merge=lfs -text");
+            var s = _sb.CreateSession(trio.Local.WorkingDirectory, new FakeEditorHooks());
+            await s.RefreshAsync();
+            var v = new GitWindowView(s);
+            using (UnityGitTestWindow.Open(v))
+            {
+                var refresh = v.Q<Button>(UiNames.RefreshButton);
+                refresh.Focus();
+                using (var submit = NavigationSubmitEvent.GetPooled()) refresh.SendEvent(submit); // what a click does
+
+                await s.RefreshAsync(); // joins the refresh the click started
+            }
+
+            Assert.That(s.Snapshot.LfsLocks, Is.Null);
+        }
+
         [Test] public async Task Ready_ShowsBranchAndCounts()
         {
             var (s, _) = await TrioWithUnpushedCommitAsync();
@@ -161,6 +199,16 @@ namespace UnityGit.Tests
             {
                 OutcomeStore.Save(before); // Leaves the editor's persisted outcome as it was.
             }
+        }
+
+        // A refresh that keeps failing logs its warning once, not on every focus or asset change.
+        [Test] public void WarningFilter_PassesEachWarningOnceUntilItChanges()
+        {
+            var filter = new WarningFilter();
+
+            var passed = new[] { "a", "a", "b", "a", "a" }.Select(filter.ShouldLog).ToArray();
+
+            Assert.That(passed, Is.EqualTo(new[] { true, false, true, true, false }));
         }
 
         [Test] public void BranchMenuItems_LocalThenRemoteOnly()

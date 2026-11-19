@@ -1,4 +1,5 @@
 #nullable enable
+using System.Threading.Tasks;
 using UnityEngine.UIElements;
 using UnityGit.UI.Theme;
 
@@ -16,9 +17,23 @@ namespace UnityGit.UI
             AddToClassList(PanelClasses.Content);
             Add(_local.InCard("Local branches"));
             Add(_remote.InCard("Remote branches"));
-            _local.OnChosen(b => _ = _session.SwitchBranchAsync(b.Name));
-            _remote.OnChosen(b => _ = _session.SwitchBranchAsync(b.ShortName));
+            _local.OnChosen(b => _ = SwitchAsync(b.Name));
+            _remote.OnChosen(b => _ = SwitchAsync(b.ShortName));
             Render();
+        }
+
+        /// <summary>
+        /// What a double-click (or Enter) on a branch row does. The current branch is ignored: switching to it would run
+        /// the whole switch flow for nothing. A row can't be disabled the way a button is, so a refusal (Play Mode, busy)
+        /// is recorded, and the outcome bar says why nothing happened. Returns null when no switch was tried.
+        /// </summary>
+        internal async Task<ActionOutcome?> SwitchAsync(string branch)
+        {
+            var s = _session.Snapshot;
+            if (!s.IsDetached && s.Branch == branch) return null;
+            var outcome = await _session.SwitchBranchAsync(branch);
+            MainToolbarButtons.RecordOutcome(_session, outcome); // records only a refusal; the click feedback is the toolbar's
+            return outcome;
         }
 
         public void Render()

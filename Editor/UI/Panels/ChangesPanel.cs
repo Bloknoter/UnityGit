@@ -22,6 +22,9 @@ namespace UnityGit.UI
         readonly Label _summary;
         readonly TextField _message;
         readonly Button _submit;
+        // The typed message is kept in SessionState, so it survives domain reloads (a script change, entering Play Mode).
+        // The key holds the project path, so sessions on other folders (the tests' sandboxes) keep their own.
+        readonly string _messageKey;
 
         // Unticked rather than ticked rows, so rows that appear later default to ticked.
         readonly HashSet<string> _unticked = new HashSet<string>(StringComparer.Ordinal);
@@ -36,6 +39,7 @@ namespace UnityGit.UI
         public ChangesPanel(GitSession session)
         {
             _session = session;
+            _messageKey = "UnityGit.CommitMessage." + session.ProjectPath;
             AddToClassList(PanelClasses.Content);
 
             // A table header lined up with the rows: the checkbox column, then "File", and the summary on the right.
@@ -72,8 +76,13 @@ namespace UnityGit.UI
             var commitCard = EditorUiElements.Card();
             commitCard.AddToClassList("unitygit-commit-card");
             _message = new TextField { name = UiNames.CommitMessage, multiline = true };
+            _message.SetValueWithoutNotify(UnityEditor.SessionState.GetString(_messageKey, string.Empty));
             _message.AddToClassList("unitygit-commit-message");
-            _message.RegisterValueChangedCallback(_ => UpdateSubmit());
+            _message.RegisterValueChangedCallback(e =>
+            {
+                SaveMessage(e.newValue);
+                UpdateSubmit();
+            });
             commitCard.Add(_message);
 
             _submit = new Button(() => _ = SubmitCommitAsync()) { name = UiNames.CommitSubmit, text = "Commit" };
@@ -157,6 +166,7 @@ namespace UnityGit.UI
             {
                 _unticked.Clear();
                 _message.value = string.Empty;
+                SaveMessage(string.Empty); // here too: a box outside a panel sends no ChangeEvent
             }
             Render();
             return outcome;
@@ -195,6 +205,12 @@ namespace UnityGit.UI
                 default: // Modified, TypeChanged
                     return EditorUiTone.Info;
             }
+        }
+
+        void SaveMessage(string message)
+        {
+            if (string.IsNullOrEmpty(message)) UnityEditor.SessionState.EraseString(_messageKey);
+            else UnityEditor.SessionState.SetString(_messageKey, message);
         }
 
         bool IsTickable(string rowPath)

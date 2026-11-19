@@ -68,7 +68,8 @@ namespace UnityGit.UI
             _progress = new Label { name = UiNames.Progress };
             _progress.AddToClassList(EditorUiClasses.Muted);
             _progress.AddToClassList(EditorUiClasses.Small);
-            _refreshButton = ToolbarAction(UiNames.RefreshButton, "Refresh", GitIcon.Refresh, () => _ = _session.RefreshAsync(true));
+            // Local, like every refresh (spec §5.4): only "Refresh locks" asks the LFS server for the lock list.
+            _refreshButton = ToolbarAction(UiNames.RefreshButton, "Refresh", GitIcon.Refresh, () => _ = _session.RefreshAsync());
             _cancelButton = ToolbarAction(UiNames.CancelButton, "Cancel", GitIcon.Cancel, _session.Cancel);
             toolbar.Add(_branchMenu);
             toolbar.Add(_commitButton);
@@ -243,6 +244,17 @@ namespace UnityGit.UI
                     _body.Add(StateCard(message, Primary(new Button(() => Application.OpenURL(GitDownloadUrl)) { text = "Download Git" })));
                     return () => message.text = _session.Snapshot.Message ?? string.Empty;
 
+                case RepoAvailability.Unavailable:
+                    // git found a repo but refuses it. Its message, shown as is, usually ends with the fix (for example a
+                    // safe.directory command), so it can be selected and copied. No Init: the repo exists.
+                    var gitMessage = new Label { name = UiNames.UnavailableMessage };
+                    gitMessage.AddToClassList(EditorUiClasses.Mono);
+                    gitMessage.AddToClassList(EditorUiClasses.Small);
+                    gitMessage.AddToClassList("unitygit-state-details");
+                    gitMessage.selection.isSelectable = true;
+                    _body.Add(StateCard(StateMessage(new Label("Git can't open this repository") { name = UiNames.Unavailable }), gitMessage));
+                    return () => gitMessage.text = _session.Snapshot.Message ?? string.Empty;
+
                 case RepoAvailability.NotARepository:
                     var init = Primary(new Button(() => _ = _session.InitAsync()) { name = UiNames.InitButton, text = "Git init" });
                     GitIcons.Apply(init, GitIcon.Init);
@@ -360,7 +372,8 @@ namespace UnityGit.UI
             return label;
         }
 
-        // No repository, Git missing and Loading: a centred kit card holding the message and its button.
+        // No repository, Git missing, Git can't open the repository and Loading: a centred kit card holding the message
+        // and its button or details.
         static VisualElement StateCard(params VisualElement[] children)
         {
             var card = EditorUiElements.Card();

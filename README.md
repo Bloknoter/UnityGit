@@ -22,7 +22,7 @@ Unity does not accept git URLs in a package's own dependencies, so FlexGit has t
 
 ## Usage
 
-Open the window from **Tools → Git → UnityGit**. If the project is not in a git repository, the window offers **Git init**. It creates a repository at the project root and writes a Unity `.gitignore` (an existing `.gitignore` is left alone). No commit is made.
+Open the window from **Tools → Git → UnityGit**. If the project is not in a git repository, the window offers **Git init**. It creates a repository at the project root and writes a Unity `.gitignore` (an existing `.gitignore` is left alone). No commit is made. If a repository is there but git refuses to open it (for example a `safe.directory` ownership check), the window shows git's own message instead, which usually ends with the command that fixes it.
 
 The window has an action toolbar (branch dropdown, Commit, Fetch, Pull, Push, Refresh, Cancel while an action can be cancelled), a bar showing the last outcome, and a left navigation with these panels:
 
@@ -36,12 +36,13 @@ The window has an action toolbar (branch dropdown, Commit, Fetch, Pull, Push, Re
 Action rules:
 
 - **Commit** commits exactly the files you tick in Changes. Ticked files are staged and unticked files are unstaged. An asset and its `.meta` file appear as one row, and ticking it commits both. A header row has a tick-all checkbox and shows how many files are ticked. Click, Ctrl+click and Shift+click select rows; ticking a row that is part of the selection applies to the whole selection, and Space toggles the selected rows. The Commit button is disabled with an empty message or nothing ticked.
-- Before Commit, Pull and Switch, unsaved assets are saved and you are asked about modified scenes. If you cancel, nothing happens. If saving reveals changed files you have not seen, the commit stops and the new files are listed (ticked) so you can review them and commit again.
+- Before Commit, Pull and Switch, unsaved assets are saved and you are asked about modified scenes. If you cancel, or choose **Don't Save**, the action is cancelled and nothing happens. If saving reveals changed files you have not seen, the commit stops and the new files are listed (ticked) so you can review them and commit again.
 - **Push** pushes the current branch and sets the upstream on the first push. A rejected push is shown as an outcome ("someone pushed first — pull, then push"). If the repo uses LFS but LFS hooks are not installed, Push is blocked until you click **Set up LFS**. UnityGit never installs LFS hooks on its own.
 - **Fetch** fetches from the default remote.
-- **Pull** follows your git config: `pull.rebase=true` rebases, `pull.ff=only` fast-forwards only, otherwise it merges. Unity reimports the changed files afterwards.
+- **Pull** follows `pull.rebase` and `pull.ff` from your git config: `pull.rebase=true` rebases, `pull.ff=only` fast-forwards only, otherwise it merges. The per-branch `branch.<name>.rebase` setting isn't read. Unity reimports the changed files afterwards.
 - **Switch branch** lists local branches and remote-only branches (picking one creates a local tracking branch). If git refuses because local changes would be overwritten, nothing is discarded.
 - **Conflicts, merge and rebase** are resolved outside the tool. Conflicted rows cannot be ticked, and Commit is disabled while any conflict exists and during a rebase, cherry-pick, revert or bisect. The window tells you to finish or abort it outside the tool.
+- **During a merge**, every row is locked ticked and goes into the merge commit, including untracked and unrelated files. A `git commit` in a terminal would leave those out.
 - **Play Mode** disables Init, Pull and Switch. Commit, Push and Fetch stay available.
 - UnityGit never discards local changes.
 

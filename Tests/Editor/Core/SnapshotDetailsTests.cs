@@ -141,5 +141,38 @@ namespace UnityGit.Tests
             // git-lfs answers "[]" (exit 0) for a file:// remote, so no error occurs; the point is that it never throws.
             Assert.That(s.Snapshot.LfsLocks, Is.Null.Or.Empty);
         }
+
+        // An LFS repo whose lock list git-lfs can load: it answers "[]" (exit 0) for the trio's local remote.
+        async Task<GitSession> LfsSessionAsync()
+        {
+            var trio = await _sb.CreateTrioAsync();
+            if (!trio.Local.Lfs.IsInstalled) Assert.Ignore("git-lfs not installed");
+            GitSandbox.WriteFile(trio.Local, ".gitattributes", LfsAttributes);
+            return _sb.CreateSession(trio.Local.WorkingDirectory, new FakeEditorHooks());
+        }
+
+        // Locks have their own refresh (spec 5.7): a later refresh without them keeps the list the user loaded.
+        [Test] public async Task Refresh_KeepsLoadedLfsLocks()
+        {
+            var s = await LfsSessionAsync();
+            await s.RefreshAsync(true);
+            Assert.That(s.Snapshot.LfsLocks, Is.Not.Null, "setup: the lock list loaded");
+
+            await s.RefreshAsync();
+
+            Assert.That(s.Snapshot.LfsLocks, Is.Not.Null);
+        }
+
+        // "Refresh locks" clicked while an automatic refresh (without locks) runs still loads the locks.
+        [Test] public async Task Refresh_LocksRequestedDuringRefresh_LoadsLocks()
+        {
+            var s = await LfsSessionAsync();
+
+            var plain = s.RefreshAsync();
+            var withLocks = s.RefreshAsync(true);
+            await Task.WhenAll(plain, withLocks);
+
+            Assert.That(s.Snapshot.LfsLocks, Is.Not.Null);
+        }
     }
 }

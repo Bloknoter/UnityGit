@@ -16,7 +16,10 @@ namespace UnityGit
         readonly CancellationTokenSource _cts = new CancellationTokenSource();
         readonly object _gate = new object();
         GitRepository? _repo;
+        bool _reopenRepo; // git said the repo is gone: the next load opens it again instead of using _repo
         Task? _running;
+        bool _runningLoadsLocks;
+        Task? _locksAfterRunning;
         RepoSnapshot _snapshot;
         CancellationTokenSource? _actionCts;
         bool _isPlayMode;
@@ -29,14 +32,23 @@ namespace UnityGit
             ProjectPath = projectPath;
             Hooks = hooks;
             _options = options;
-            _options.Logger = (level, msg) => Log?.Invoke(msg);
+            _options.Logger = (level, msg) => InvokeLog(msg);
             _context = SynchronizationContext.Current;
             _snapshot = RepoSnapshot.Loading(projectPath);
         }
 
         public string ProjectPath { get; }
         public RepoSnapshot Snapshot => _snapshot;
+
+        /// <summary>Verbose diagnostics: every git command FlexGit runs. Called from background threads.</summary>
         public Action<string>? Log { get; set; }
+
+        /// <summary>
+        /// Problems worth showing without verbose logging, such as a refresh that failed. Called from background threads,
+        /// so the handler must be thread-safe. A handler that throws never affects a refresh or an action.
+        /// </summary>
+        public Action<string>? Warning { get; set; }
+
         public event Action? Changed;
         public event Action<Exception>? UnexpectedError;
 
@@ -62,14 +74,31 @@ namespace UnityGit
 
         public ActionAvailability GetAvailability(GitAction action) => ActionRules.Evaluate(action, Snapshot, IsBusy, IsPlayMode);
 
-        /// <summary>Does nothing while an action runs; every action refreshes when it finishes.</summary>
+        /// <summary>
+        /// Does nothing while an action runs; every action refreshes when it finishes. A request made while a refresh runs
+        /// joins it, except that a request for LFS locks while a refresh without them runs gets one lock refresh after it.
+        /// </summary>
         public Task RefreshAsync(bool includeLfsLocks = false)
         {
             lock (_gate)
             {
                 if (IsBusy) return Task.CompletedTask;
-                return _running ??= RunRefreshAsync(includeLfsLocks);
+                if (_running == null)
+                {
+                    _runningLoadsLocks = includeLfsLocks;
+                    return _running = RunRefreshAsync(includeLfsLocks);
+                }
+                if (!includeLfsLocks || _runningLoadsLocks) return _running;
+                return _locksAfterRunning ??= RefreshLocksAfterAsync(_running);
             }
+        }
+
+        // _running is still set, so it hasn't finished: the continuation below always runs after ??= stored this task.
+        async Task RefreshLocksAfterAsync(Task running)
+        {
+            await running.ConfigureAwait(false);
+            lock (_gate) _locksAfterRunning = null;
+            await RefreshAsync(true).ConfigureAwait(false);
         }
 
         public Task<ActionOutcome> InitAsync() => RunAsync(GitAction.Init, false, async (_, _) =>
@@ -160,7 +189,9 @@ namespace UnityGit
             switch (result.Status)
             {
                 case PushStatus.Pushed:
-                    return new ActionOutcome(push, OutcomeKind.Succeeded, $"Pushed to {Snapshot.Upstream}");
+                    // The upstream comes from the refresh after the push; if that refresh failed, there may be none to name.
+                    var upstream = Snapshot.Upstream;
+                    return new ActionOutcome(push, OutcomeKind.Succeeded, upstream != null ? $"Pushed to {upstream}" : "Pushed");
                 case PushStatus.UpToDate:
                     return new ActionOutcome(push, OutcomeKind.Succeeded, "Already up to date");
                 case PushStatus.Rejected:
@@ -219,7 +250,9 @@ namespace UnityGit
                         $"Pull stopped with conflicts in {OutcomeMessages.Files(conflicted.Count)} — resolve them outside UnityGit",
                         conflictedPaths: conflicted);
                 case PullStatus.LocalChangesWouldBeOverwritten:
-                    return new ActionOutcome(pull, OutcomeKind.Failed, "Pull blocked: your local changes would be overwritten — commit or stash them first");
+                    // git's output names the blocking files (or, for a rebase pull, says the tree is dirty).
+                    return new ActionOutcome(pull, OutcomeKind.Failed, "Pull blocked: your local changes would be overwritten — commit or stash them first",
+                        OutcomeMessages.Details(result.Error));
                 case PullStatus.NoUpstream:
                     return new ActionOutcome(pull, OutcomeKind.Failed, "This branch has no upstream — push it first");
                 case PullStatus.CannotFastForward:
@@ -254,7 +287,8 @@ namespace UnityGit
                     return new ActionOutcome(GitAction.Switch, OutcomeKind.Succeeded, $"Switched to {branch}");
                 case SwitchStatus.LocalChangesWouldBeOverwritten:
                     return new ActionOutcome(GitAction.Switch, OutcomeKind.Failed,
-                        "Switch blocked: your local changes would be overwritten — commit or stash them first");
+                        "Switch blocked: your local changes would be overwritten — commit or stash them first",
+                        OutcomeMessages.Details(result.Error));
                 case SwitchStatus.NotFound:
                     return new ActionOutcome(GitAction.Switch, OutcomeKind.Failed, $"Branch {branch} not found");
                 default:
@@ -387,17 +421,17 @@ namespace UnityGit
         {
             // Yield so RefreshAsync has stored _running before this body can finish and clear it.
             await Task.Yield();
-            bool loaded;
+            bool changed;
             try
             {
-                loaded = await TryLoadAsync(includeLfsLocks).ConfigureAwait(false);
+                changed = await TryLoadAsync(includeLfsLocks).ConfigureAwait(false);
             }
             finally
             {
                 // Cleared before Changed is raised, so a Changed handler can start a new refresh.
                 lock (_gate) _running = null;
             }
-            if (loaded) RaiseChanged();
+            if (changed) RaiseChanged();
         }
 
         // The refresh path for actions: it runs while IsBusy, when the public RefreshAsync does nothing.
@@ -411,7 +445,11 @@ namespace UnityGit
             await TryLoadAsync(false).ConfigureAwait(false);
         }
 
-        /// <summary>Loads a new snapshot into <see cref="Snapshot"/>. Returns false if loading failed.</summary>
+        /// <summary>
+        /// Loads a new snapshot into <see cref="Snapshot"/>. Returns whether <see cref="Snapshot"/> changed. A failed load
+        /// keeps the last snapshot (stale but useful) and warns; with nothing loaded yet, the failure becomes the snapshot,
+        /// so the window and the toolbar don't stay on "Loading…".
+        /// </summary>
         async Task<bool> TryLoadAsync(bool includeLfsLocks)
         {
             try
@@ -421,17 +459,29 @@ namespace UnityGit
             }
             catch (GitCommandException ex)
             {
-                Log?.Invoke(ex.Message);
+                // The repo is gone (.git deleted or moved): the next refresh looks for it again. _repo is kept until then,
+                // so an action clicked meanwhile (the stale snapshot still allows it) gets git's own error.
+                if (ex.Kind == GitErrorKind.NotARepository) _reopenRepo = true;
+                InvokeWarning($"Refresh failed: {ex.Message}");
+                return ShowFailureIfNothingLoaded(OutcomeMessages.GitsWords(ex.Error));
             }
             catch (OperationCanceledException) when (_cts.IsCancellationRequested)
             {
                 // Disposed while refreshing.
+                return false;
             }
             catch (Exception ex)
             {
                 Raise(() => ReportUnexpected(ex));
+                return ShowFailureIfNothingLoaded(ex.Message);
             }
-            return false;
+        }
+
+        bool ShowFailureIfNothingLoaded(string message)
+        {
+            if (_snapshot.Availability == RepoAvailability.Ready) return false;
+            _snapshot = RepoSnapshot.Unavailable(ProjectPath, message);
+            return true;
         }
 
         async Task<RepoSnapshot> LoadAsync(bool includeLfsLocks)
@@ -446,14 +496,31 @@ namespace UnityGit
                 return RepoSnapshot.GitMissing(ProjectPath, OutcomeMessages.ForErrorKind(ex.Kind, ex.Error.Message));
             }
 
-            if (_repo == null)
+            var repo = _reopenRepo ? null : _repo;
+            if (repo == null)
             {
-                if (!await GitRepository.IsRepositoryAsync(ProjectPath, _options, ct).ConfigureAwait(false))
+                try
+                {
+                    repo = await GitRepository.OpenAsync(ProjectPath, _options, ct).ConfigureAwait(false);
+                }
+                catch (GitCommandException ex) when (ex.Kind == GitErrorKind.NotARepository)
+                {
                     return RepoSnapshot.NotARepository(ProjectPath);
-                _repo = await GitRepository.OpenAsync(ProjectPath, _options, ct).ConfigureAwait(false);
+                }
+                catch (GitCommandException ex)
+                {
+                    // A repo is there but git refuses it (dubious ownership, an unsupported format, ...): show git's
+                    // reason, which often ends with its own fix, rather than offer Git init on top of the repo.
+                    return RepoSnapshot.Unavailable(ProjectPath, OutcomeMessages.GitsWords(ex.Error));
+                }
+                _repo = repo;
+                _reopenRepo = false;
             }
 
-            return await SnapshotLoader.LoadAsync(_repo, ProjectPath, includeLfsLocks, ct, msg => Log?.Invoke(msg)).ConfigureAwait(false);
+            var snapshot = await SnapshotLoader.LoadAsync(repo, ProjectPath, includeLfsLocks, ct, InvokeWarning).ConfigureAwait(false);
+            // Locks have their own refresh (spec §5.7), so a load without them keeps the list the user loaded last.
+            if (!includeLfsLocks && snapshot.Lfs.UsedByRepo) snapshot.LfsLocks = _snapshot.LfsLocks;
+            return snapshot;
         }
 
         static ActionOutcome Refused(GitAction action, string message) => new ActionOutcome(action, OutcomeKind.Refused, message);
@@ -476,6 +543,25 @@ namespace UnityGit
                 {
                     ReportUnexpected(ex);
                 }
+            }
+        }
+
+        void InvokeLog(string message) => InvokeSafely(Log, message);
+
+        void InvokeWarning(string message) => InvokeSafely(Warning, message);
+
+        // Log and Warning run inside refreshes and actions: a handler that throws must not turn a successful action into
+        // "Unexpected error", so its exception is reported instead.
+        void InvokeSafely(Action<string>? handler, string message)
+        {
+            if (handler == null) return;
+            try
+            {
+                handler(message);
+            }
+            catch (Exception ex)
+            {
+                Raise(() => ReportUnexpected(ex));
             }
         }
 

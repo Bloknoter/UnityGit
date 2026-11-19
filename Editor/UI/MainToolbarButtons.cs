@@ -68,6 +68,7 @@ namespace UnityGit.UI
         /// Records what the window needs and picks the click's feedback, since the toolbar has no outcome bar: a failed or
         /// refused action opens the window, whose outcome bar explains it, and a success shows a short notification. The
         /// runner records the outcome of every action that ran; a refusal by availability never ran, so it is recorded here.
+        /// The window's branch list records its double-click outcomes through this too, and ignores the feedback.
         /// </summary>
         internal static ClickFeedback RecordOutcome(GitSession s, ActionOutcome outcome)
         {

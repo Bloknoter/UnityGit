@@ -24,6 +24,9 @@ namespace UnityGit.Tests
             Assert.That(ActionRules.Evaluate(GitAction.Init, s, false, false).Enabled, Is.True);
             Assert.That(Why(GitAction.Push, s), Is.EqualTo("This project is not in a git repository"));
         }
+        [Test] public void Unavailable_DisablesEverything()
+            => Assert.That(Enum.GetValues(typeof(GitAction)).Cast<GitAction>().Select(a => Why(a, RepoSnapshot.Unavailable("p", "fatal: git's own words"))),
+                Has.All.EqualTo("Git can't open this repository"));
         [Test] public void GitMissing_UsesSnapshotMessage() => Assert.That(Why(GitAction.Fetch, RepoSnapshot.GitMissing("p", "msg")), Is.EqualTo("msg"));
         [Test] public void Init_WhenReady_Refused() => Assert.That(Why(GitAction.Init, Ready()), Is.EqualTo("Already a git repository"));
         [Test] public void Commit_WithConflicts_Refused()

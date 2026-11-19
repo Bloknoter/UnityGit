@@ -20,6 +20,7 @@ namespace UnityGit.UI
         // request covers the whole burst, and regaining focus still feels immediate.
         const double RefreshDebounceSeconds = 0.5;
 
+        static readonly WarningFilter Warnings = new WarningFilter();
         static GitSession? _session;
         static GitSession? _override;
         static double _refreshDueAt;
@@ -84,6 +85,11 @@ namespace UnityGit.UI
             {
                 if (_verboseLogging) Debug.Log("[UnityGit] " + msg);
             };
+            // Not gated by the verbose toggle. Called off the main thread too; Debug.LogWarning is thread-safe.
+            session.Warning = msg =>
+            {
+                if (Warnings.ShouldLog(msg)) Debug.LogWarning("[UnityGit] " + msg);
+            };
             // Set here too, not only on change: entering Play Mode reloads the domain, so a session created afterwards
             // never sees the event.
             session.IsPlayMode = EditorApplication.isPlayingOrWillChangePlaymode;
@@ -120,6 +126,26 @@ namespace UnityGit.UI
         }
 
         static void OnBeforeAssemblyReload() => _session?.Dispose();
+    }
+
+    /// <summary>
+    /// Lets each warning through once until a different one arrives, so a refresh that fails on every focus or asset
+    /// change logs once. Thread-safe: the session warns from background threads.
+    /// </summary>
+    internal sealed class WarningFilter
+    {
+        readonly object _gate = new object();
+        string? _last;
+
+        public bool ShouldLog(string message)
+        {
+            lock (_gate)
+            {
+                if (message == _last) return false;
+                _last = message;
+                return true;
+            }
+        }
     }
 
     /// <summary>Keeps the last outcome in <see cref="SessionState"/>, so the outcome bar survives a domain reload.</summary>

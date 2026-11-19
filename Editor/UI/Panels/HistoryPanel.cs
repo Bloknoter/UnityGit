@@ -1,4 +1,6 @@
 #nullable enable
+using System;
+using System.Globalization;
 using UnityEngine.UIElements;
 using UnityGit.UI.Theme;
 
@@ -19,6 +21,10 @@ namespace UnityGit.UI
         }
 
         public void Render() => _list.Set(_session.Snapshot.RecentCommits);
+
+        /// <summary>A commit date in the viewer's local time, formatted the same in every culture.</summary>
+        internal static string FormatDate(DateTimeOffset date)
+            => date.ToLocalTime().ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
 
         /// <summary>Short SHA in monospace, the subject, then the muted author and faint date.</summary>
         sealed class CommitRow : VisualElement
@@ -44,7 +50,7 @@ namespace UnityGit.UI
                 row._sha.text = c.ShortSha;
                 row._subject.text = c.Subject;
                 row._author.text = c.AuthorName;
-                row._date.text = $"{c.Date:yyyy-MM-dd HH:mm}";
+                row._date.text = FormatDate(c.Date);
                 row.tooltip = c.Subject;
             }
         }
