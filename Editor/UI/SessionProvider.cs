@@ -36,6 +36,7 @@ namespace UnityGit.UI
                 EditorApplication.focusChanged += OnFocusChanged;
                 EditorApplication.playModeStateChanged += OnPlayModeStateChanged;
                 AssemblyReloadEvents.beforeAssemblyReload += OnBeforeAssemblyReload;
+                CurrentChanged += MainToolbarButtons.RefreshAll; // the toolbar shows whichever session is current
             }
             catch (Exception ex)
             {
@@ -92,6 +93,7 @@ namespace UnityGit.UI
                 OutcomeStore.Save(session.LastOutcome);
                 UpdateVerboseLogging(); // Changed runs on the main thread, so a toggled preference applies from here on.
             };
+            session.Changed += MainToolbarButtons.RefreshAll; // its own handler, so a failure above can't stop it
             session.UnexpectedError += Debug.LogException;
             _ = session.RefreshAsync();
             return session;

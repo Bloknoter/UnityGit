@@ -6,6 +6,10 @@ Draws UnityGit's action icons into Editor/UI/Icons.
 Each icon is a 32x32 PNG of anti-aliased white 2px lines with round caps and joins, on a transparent background.
 The window shows them at 16x16 and tints them in GitWindow.uss, so only the alpha channel carries the shape.
 
+Unity's main toolbar draws icons untinted, so the icons it shows (branch, commit, fetch, pull, push) also get a dark
+copy in Icons/LightSkin for the light editor skin. It is drawn in that skin's toolbar text colour, rgb(9, 9, 9)
+(--unity-colors-toolbar_button-text), so the icon reads like the label beside it, as in the window.
+
 Coordinates work like SVG: pixel (i, j) covers [i, i+1] x [j, j+1]. Straight lines sit on odd coordinates, so a
 2px line covers two whole pixels (2k and 2k+1) and stays one crisp pixel wide when Unity draws the icon at 16x16.
 
@@ -19,6 +23,8 @@ Add-Type -AssemblyName System.Drawing
 
 $Size = 32
 $Stroke = 2
+$LightSkinIcons = 'branch', 'commit', 'fetch', 'pull', 'push'
+$LightSkinGlyph = [System.Drawing.Color]::FromArgb(9, 9, 9)
 
 function New-Pt([double]$x, [double]$y) { New-Object System.Drawing.PointF ([single]$x), ([single]$y) }
 
@@ -166,6 +172,21 @@ $icons = [ordered]@{
 
 New-Item -ItemType Directory -Force $OutDir | Out-Null
 $OutDir = (Resolve-Path $OutDir).Path
+$LightSkinDir = Join-Path $OutDir 'LightSkin'
+New-Item -ItemType Directory -Force $LightSkinDir | Out-Null
+
+# The shape lives in alpha alone: every pixel takes the glyph colour, keeping its alpha, so that tinted edges carry no
+# dark fringe. Recolouring keeps the alpha, so the same bitmap can be saved again in another colour.
+function Save-Glyph($bitmap, [System.Drawing.Color]$color, [string]$file) {
+    for ($y = 0; $y -lt $Size; $y++) {
+        for ($x = 0; $x -lt $Size; $x++) {
+            $alpha = $bitmap.GetPixel($x, $y).A
+            $bitmap.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($alpha, $color.R, $color.G, $color.B))
+        }
+    }
+    $bitmap.Save($file, [System.Drawing.Imaging.ImageFormat]::Png)
+    Write-Host "Wrote $file"
+}
 
 foreach ($name in $icons.Keys) {
     $bitmap = New-Object System.Drawing.Bitmap $Size, $Size, ([System.Drawing.Imaging.PixelFormat]::Format32bppArgb)
@@ -185,16 +206,12 @@ foreach ($name in $icons.Keys) {
         $g.Dispose()
     }
 
-    # The shape lives in alpha alone: every pixel is made white so that tinted edges carry no dark fringe.
-    for ($y = 0; $y -lt $Size; $y++) {
-        for ($x = 0; $x -lt $Size; $x++) {
-            $alpha = $bitmap.GetPixel($x, $y).A
-            $bitmap.SetPixel($x, $y, [System.Drawing.Color]::FromArgb($alpha, 255, 255, 255))
+    try {
+        Save-Glyph $bitmap ([System.Drawing.Color]::White) (Join-Path $OutDir "$name.png")
+        if ($LightSkinIcons -contains $name) {
+            Save-Glyph $bitmap $LightSkinGlyph (Join-Path $LightSkinDir "$name.png")
         }
+    } finally {
+        $bitmap.Dispose()
     }
-
-    $file = Join-Path $OutDir "$name.png"
-    $bitmap.Save($file, [System.Drawing.Imaging.ImageFormat]::Png)
-    $bitmap.Dispose()
-    Write-Host "Wrote $file"
 }

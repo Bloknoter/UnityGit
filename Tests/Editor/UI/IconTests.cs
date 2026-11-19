@@ -39,6 +39,15 @@ namespace UnityGit.Tests
             Assert.That(button.iconImage.texture, Is.Not.Null, button.name);
         }
 
+        // Unity's main toolbar shows these, untinted, so each also has a dark variant for the light skin.
+        static readonly GitIcon[] MainToolbarIcons = { GitIcon.Branch, GitIcon.Commit, GitIcon.Fetch, GitIcon.Pull, GitIcon.Push };
+
+        // Every icon file: the white originals, then the light-skin variants.
+        static string[] IconPaths()
+            => Enum.GetValues(typeof(GitIcon)).Cast<GitIcon>().Select(GitIcons.PathOf)
+                .Concat(MainToolbarIcons.Select(GitIcons.LightSkinPathOf))
+                .ToArray();
+
         [Test] public void EveryIcon_Loads()
         {
             foreach (GitIcon icon in Enum.GetValues(typeof(GitIcon)))
@@ -48,9 +57,8 @@ namespace UnityGit.Tests
         // The committed .meta files: crisp editor icons, drawn at 16px from a 32px source.
         [Test] public void EveryIcon_ImportsAsEditorGuiTexture()
         {
-            foreach (GitIcon icon in Enum.GetValues(typeof(GitIcon)))
+            foreach (var path in IconPaths())
             {
-                var path = GitIcons.PathOf(icon);
                 var importer = AssetImporter.GetAtPath(path) as TextureImporter;
                 Assert.That(importer, Is.Not.Null, path);
                 Assert.That(importer!.textureType, Is.EqualTo(TextureImporterType.GUI), path);
@@ -61,7 +69,8 @@ namespace UnityGit.Tests
                 Assert.That(importer.wrapMode, Is.EqualTo(TextureWrapMode.Clamp), path);
                 Assert.That(importer.filterMode, Is.EqualTo(FilterMode.Bilinear), path);
                 Assert.That(importer.textureCompression, Is.EqualTo(TextureImporterCompression.Uncompressed), path);
-                var texture = GitIcons.Load(icon)!;
+                var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(path);
+                Assert.That(texture, Is.Not.Null, path);
                 Assert.That(texture.width, Is.EqualTo(32), path);
                 Assert.That(texture.mipmapCount, Is.EqualTo(1), path);
             }

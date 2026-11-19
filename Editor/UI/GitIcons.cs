@@ -26,6 +26,19 @@ namespace UnityGit.UI
         /// <summary>The icon's texture, or null when its file is missing.</summary>
         public static Texture2D? Load(GitIcon icon) => AssetDatabase.LoadAssetAtPath<Texture2D>(PathOf(icon));
 
+        /// <summary>
+        /// The dark copy of a main-toolbar icon (Branch, Commit, Fetch, Pull, Push) for the light editor skin. Unity's main
+        /// toolbar draws icons untinted, so the white originals would barely show on that skin's light toolbar.
+        /// </summary>
+        public static string LightSkinPathOf(GitIcon icon) => $"{Folder}/LightSkin/{icon.ToString().ToLowerInvariant()}.png";
+
+        /// <summary>
+        /// The icon for Unity's main toolbar: the white original on the dark skin, the dark copy on the light skin. Null when
+        /// the file is missing, as it is on the light skin for an icon the main toolbar doesn't show.
+        /// </summary>
+        public static Texture2D? LoadForMainToolbar(GitIcon icon)
+            => AssetDatabase.LoadAssetAtPath<Texture2D>(EditorGUIUtility.isProSkin ? PathOf(icon) : LightSkinPathOf(icon));
+
         /// <summary>Sets the button's icon, which Unity shows before the text. Does nothing when the file is missing.</summary>
         public static void Apply(Button button, GitIcon icon)
         {
