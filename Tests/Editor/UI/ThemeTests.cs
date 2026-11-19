@@ -53,6 +53,25 @@ namespace UnityGit.Tests
             Assert.That(v.styleSheets.Contains(sheet), Is.True);
         }
 
+        // The toolbar row sits on the window background: no kit panel behind it, no border, no side padding.
+        [Test] public async Task Toolbar_HasNoPanel()
+        {
+            var (_, s) = await ReadySessionAsync();
+            var v = new GitWindowView(s);
+            using (var window = UnityGitTestWindow.Open(v))
+            {
+                window.ResolveStylesAndLayout();
+                var toolbar = v.Q(UiNames.Toolbar);
+
+                Assert.That(toolbar.resolvedStyle.backgroundColor.a, Is.EqualTo(0));
+                Assert.That(toolbar.resolvedStyle.borderTopWidth, Is.EqualTo(0));
+                Assert.That(toolbar.resolvedStyle.borderBottomWidth, Is.EqualTo(0));
+                Assert.That(toolbar.resolvedStyle.borderLeftWidth, Is.EqualTo(0));
+                Assert.That(toolbar.resolvedStyle.borderRightWidth, Is.EqualTo(0));
+                Assert.That(toolbar.resolvedStyle.paddingLeft, Is.EqualTo(0));
+            }
+        }
+
         [Test] public void ThemeTypes_AreInternal()
         {
             var publicTypes = typeof(EditorUiTheme).Assembly.GetTypes()

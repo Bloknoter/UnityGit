@@ -8,7 +8,13 @@
     flex-grow: 1;
 }
 
-/* Toolbar: the kit's inset bar (.ed-toolbar) holding kit buttons. */
+/* Toolbar: the kit's toolbar row (.ed-toolbar) holding kit buttons, with its panel removed (owner request). */
+.unitygit-window #unitygit-toolbar {
+    background-color: rgba(0, 0, 0, 0);
+    border-width: 0;
+    padding-left: 0;
+    padding-right: 0;
+}
 
 #unitygit-toolbar > .unity-button {
     height: 22px;

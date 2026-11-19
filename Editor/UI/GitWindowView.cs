@@ -56,7 +56,7 @@ namespace UnityGit.UI
             var layout = AssetDatabase.LoadAssetAtPath<StyleSheet>(LayoutSheetPath); // after the theme, so it wins ties
             if (layout != null) styleSheets.Add(layout);
 
-            // The kit's inset toolbar: a rounded bar inside the window's padding, lined up with the message and body.
+            // The kit's toolbar row without its panel (see GitWindow.uss), lined up with the message and body.
             var toolbar = EditorUiElements.Toolbar();
             toolbar.name = UiNames.Toolbar;
             _branchMenu = new ToolbarMenu { name = UiNames.BranchMenu };
