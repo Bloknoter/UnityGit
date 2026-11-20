@@ -22,6 +22,8 @@ namespace UnityGit
         public RepoOperation Operation { get; internal set; }
 
         public IReadOnlyList<ChangeItem> Changes { get; internal set; } = Array.Empty<ChangeItem>();
+        /// <summary>Every unmerged path from status (an asset and its .meta separately), repo-relative.</summary>
+        public IReadOnlyList<string> ConflictedPaths { get; internal set; } = Array.Empty<string>();
         public IReadOnlyList<BranchItem> LocalBranches { get; internal set; } = Array.Empty<BranchItem>();
         public IReadOnlyList<BranchItem> RemoteBranches { get; internal set; } = Array.Empty<BranchItem>();
         public IReadOnlyList<AuthorItem> Authors { get; internal set; } = Array.Empty<AuthorItem>();

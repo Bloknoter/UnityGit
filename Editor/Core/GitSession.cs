@@ -101,6 +101,46 @@ namespace UnityGit
             await RefreshAsync(true).ConfigureAwait(false);
         }
 
+        /// <summary>Reads the unmerged files. Not an action: no busy state, no hooks. Null when there is no repository.</summary>
+        public async Task<ConflictOverviewInfo?> LoadConflictOverviewAsync()
+        {
+            var repo = _repo;
+            if (repo == null || Snapshot.Availability != RepoAvailability.Ready) return null;
+            try
+            {
+                return ConflictLoader.ToOverview(await repo.Conflicts.GetOverviewAsync(_cts.Token));
+            }
+            catch (GitCommandException ex)
+            {
+                InvokeWarning("Loading conflicts failed: " + ex.Message);
+                return null;
+            }
+        }
+
+        /// <summary>Reads one unmerged file with its places and side names. Not an action: no busy state, no hooks.</summary>
+        public async Task<ConflictFileView?> LoadConflictFileAsync(string path)
+        {
+            var repo = _repo;
+            var snapshot = Snapshot;
+            if (repo == null || snapshot.Availability != RepoAvailability.Ready) return null;
+            try
+            {
+                var ct = _cts.Token;
+                var file = await repo.Conflicts.GetFileAsync(path, ct);
+                var merging = snapshot.Operation == RepoOperation.Merging;
+                var mergeHead = merging ? await repo.ResolveRevisionAsync("MERGE_HEAD", ct) : null;
+                var upstreamSha = merging && snapshot.Upstream != null ? await repo.ResolveRevisionAsync(snapshot.Upstream, ct) : null;
+                var (ours, theirs) = ConflictNames.Resolve(snapshot.Operation, snapshot.Branch, snapshot.Upstream,
+                    upstreamSha, mergeHead, file.OursLabel, file.TheirsLabel);
+                return ConflictLoader.ToView(file, repo.GetFullPath(path), ours, theirs);
+            }
+            catch (GitCommandException ex)
+            {
+                InvokeWarning("Loading conflicts failed: " + ex.Message);
+                return null;
+            }
+        }
+
         public Task<ActionOutcome> InitAsync() => RunAsync(GitAction.Init, false, async (_, _) =>
         {
             var gitignore = Path.Combine(ProjectPath, ".gitignore");

@@ -32,6 +32,8 @@ namespace UnityGit
                 Behind = status.Behind,
                 Operation = ToOperation(repo.GetState()),
                 Changes = ToChanges(status),
+                ConflictedPaths = status.Entries.Where(e => e.IsConflicted).Select(e => e.Path)
+                    .OrderBy(p => p, StringComparer.OrdinalIgnoreCase).ToList(),
             };
             await LoadDetailsAsync(snapshot, repo, status.IsUnborn, includeLfsLocks, warn, ct).ConfigureAwait(false);
             return snapshot;
