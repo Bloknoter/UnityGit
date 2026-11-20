@@ -1,4 +1,5 @@
 #nullable enable
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -196,6 +197,46 @@ namespace UnityGit.Tests
             Assert.That(f.Parts, Is.Empty);
             var info = o.Files.Single(x => x.Path == "img.bin");
             Assert.That((info.IsBinary, info.PlaceCount), Is.EqualTo((true, 0)));
+        }
+
+        [Test]
+        public async Task LoadFile_UnreadableFile_WarnsAndReturnsNull()
+        {
+            var (repo, s) = await MergedAsync(ConflictScenarios.TwoPlaces);
+            var warnings = new List<string>();
+            s.Warning = warnings.Add;
+
+            ConflictFileView? f;
+            using (new FileStream(Path.Combine(repo.WorkingDirectory, "f.txt"), FileMode.Open, FileAccess.Read, FileShare.None))
+                f = await s.LoadConflictFileAsync("f.txt");
+
+            Assert.That(f, Is.Null);
+            Assert.That(warnings, Has.Some.StartsWith("Loading conflicts failed: "));
+        }
+
+        // A disposed session cancels its reads: they return null without a warning.
+        [Test]
+        public async Task Loads_AfterDispose_ReturnNullQuietly()
+        {
+            var (_, s) = await MergedAsync(ConflictScenarios.TwoPlaces);
+            var warnings = new List<string>();
+            s.Warning = warnings.Add;
+
+            s.Dispose();
+
+            // Caught here: an async test whose task ends cancelled is reported as passed.
+            OperationCanceledException? thrown = null;
+            try
+            {
+                Assert.That(await s.LoadConflictOverviewAsync(), Is.Null);
+                Assert.That(await s.LoadConflictFileAsync("f.txt"), Is.Null);
+            }
+            catch (OperationCanceledException ex)
+            {
+                thrown = ex;
+            }
+            Assert.That(thrown, Is.Null);
+            Assert.That(warnings, Is.Empty);
         }
 
         [Test]

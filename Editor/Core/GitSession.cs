@@ -110,7 +110,11 @@ namespace UnityGit
             {
                 return ConflictLoader.ToOverview(await repo.Conflicts.GetOverviewAsync(_cts.Token), repo.GetFullPath);
             }
-            catch (GitCommandException ex)
+            catch (OperationCanceledException)
+            {
+                return null; // the session was disposed
+            }
+            catch (Exception ex) when (IsReadFailure(ex))
             {
                 InvokeWarning("Loading conflicts failed: " + ex.Message);
                 return null;
@@ -134,12 +138,19 @@ namespace UnityGit
                     upstreamSha, mergeHead, file.OursLabel, file.TheirsLabel);
                 return ConflictLoader.ToView(file, repo.GetFullPath(path), ours, theirs);
             }
-            catch (GitCommandException ex)
+            catch (OperationCanceledException)
+            {
+                return null; // the session was disposed
+            }
+            catch (Exception ex) when (IsReadFailure(ex))
             {
                 InvokeWarning("Loading conflicts failed: " + ex.Message);
                 return null;
             }
         }
+
+        // What a conflict read can run into: git failing, or a working-tree file that is locked or can't be opened.
+        static bool IsReadFailure(Exception ex) => ex is GitCommandException || ex is IOException || ex is UnauthorizedAccessException;
 
         public Task<ActionOutcome> InitAsync() => RunAsync(GitAction.Init, false, async (_, _) =>
         {

@@ -94,7 +94,7 @@ namespace UnityGit.UI
             _fileCard.AddToClassList("unitygit-conflict-file");
             _fileTitle = Named(Plain(PanelParts.Text(null, EditorUiClasses.Strong, PanelClasses.Ellipsis, PanelClasses.Path, "unitygit-conflict-file-title")),
                 UiNames.ConflictFileTitle);
-            _fileType = Named(PanelParts.Text(null, EditorUiClasses.Muted, "unitygit-conflict-file-type"), UiNames.ConflictFileType);
+            _fileType = Named(Plain(PanelParts.Text(null, EditorUiClasses.Muted, "unitygit-conflict-file-type")), UiNames.ConflictFileType); // holds side names
             _fileNote = EditorUiElements.Message(string.Empty, EditorUiTone.Info);
             Named(MessageLabel(_fileNote), UiNames.ConflictFileNote);
             _sceneWarning = EditorUiElements.Message(

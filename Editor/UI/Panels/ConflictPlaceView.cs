@@ -17,7 +17,7 @@ namespace UnityGit.UI
 
         readonly ConflictsPanel _panel;
         readonly ConflictPlace _place;
-        readonly Label _chip = EditorUiElements.Chip(string.Empty);
+        readonly Label _chip = ConflictsPanel.Plain(EditorUiElements.Chip(string.Empty)); // the pick's label holds side names
         readonly List<(ConflictPick Pick, Button Button)> _options = new List<(ConflictPick, Button)>();
         // Built when first needed, so a file with many places doesn't lay out every side up front.
         VisualElement? _detail;
@@ -111,7 +111,8 @@ namespace UnityGit.UI
             block.AddToClassList("unitygit-conflict-side");
             block.AddToClassList("unitygit-conflict-side--" + side);
             block.Add(ConflictsPanel.Plain(PanelParts.Text(caption, EditorUiClasses.Muted, EditorUiClasses.Small, "unitygit-conflict-side-caption")));
-            AddCapped(block, text, "unitygit-conflict-text");
+            if (text.Length == 0) block.Add(PanelParts.Text("(no lines)", EditorUiClasses.Muted, EditorUiClasses.Small, "unitygit-conflict-no-lines")); // that side removed them
+            else AddCapped(block, text, "unitygit-conflict-text");
             return block;
         }
 

@@ -559,7 +559,8 @@
 }
 
 .unitygit-conflict-collapsed,
-.unitygit-conflict-more {
+.unitygit-conflict-more,
+.unitygit-conflict-no-lines {
     -unity-font-style: italic;
     padding-left: var(--ed-space-2);
     padding-top: 1px;

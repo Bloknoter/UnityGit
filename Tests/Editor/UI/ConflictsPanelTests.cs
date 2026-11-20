@@ -398,6 +398,32 @@ namespace UnityGit.Tests
             Assert.That(p.Query<Label>().ToList().Max(l => (l.text ?? string.Empty).Length), Is.LessThanOrEqualTo(21000));
         }
 
+        // A side that removed the lines says so instead of showing an empty block.
+        [Test] public async Task Place_EmptySide_SaysNoLines()
+        {
+            await MergeAsync(ConflictScenarios.Text("e.txt", "a\nb\nc\n", "a\nc\n", "a\nB\nc\n"));
+
+            var p = await PanelAsync();
+
+            Assert.That(p.File!.Places[0].Ours, Is.Empty, "setup: main removed the line");
+            var place = Place(p, 0);
+            Assert.That(place.Q(className: "unitygit-conflict-side--ours").Query<Label>().ToList().Select(l => l.text), Has.Member("(no lines)"));
+            Assert.That(place.Q(className: "unitygit-conflict-side--theirs").Query<Label>().ToList().Select(l => l.text), Has.No.Member("(no lines)"));
+        }
+
+        // Rebase labels carry commit subjects, which may hold "<b>": side names show as typed.
+        [Test] public async Task SideNames_ShowAsTyped()
+        {
+            await MergeAsync(ConflictScenarios.TwoPlaces);
+            var p = await PanelAsync();
+
+            p.Pick(ConflictPick.Ours);
+
+            Assert.That(LabelNamed(p, UiNames.ConflictFileType).enableRichText, Is.False);
+            var chip = Place(p, 0).Q<Label>(className: EditorUiClasses.Chip);
+            Assert.That((chip.text, chip.enableRichText), Is.EqualTo(("Use main", false)));
+        }
+
         [Test] public async Task Outcome_ResolveButton_OpensConflicts()
         {
             await PullConflictAsync(rebase: false);
