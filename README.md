@@ -12,8 +12,8 @@ UnityGit lets you work with your Unity project's git repository without leaving 
 Add both lines to your project's `Packages/manifest.json`. FlexGit must come first:
 
 ```json
-"com.bloknoter.flexgit": "https://github.com/Bloknoter/FlexGit.git#upm/v2.0.0",
-"com.bloknoter.unitygit": "https://github.com/Bloknoter/UnityGit.git#v1.0.0"
+"com.bloknoter.flexgit": "https://github.com/Bloknoter/FlexGit.git#upm/v2.1.0",
+"com.bloknoter.unitygit": "https://github.com/Bloknoter/UnityGit.git#v1.1.0"
 ```
 
 Or do the same in Package Manager with **Add package from git URL**: add the FlexGit URL first, then the UnityGit URL.
@@ -31,6 +31,7 @@ The window has an action toolbar (branch dropdown, Commit, Fetch, Pull, Push, Re
 - **Branches**: local and remote branches; double-click to switch.
 - **History**: recent commits on the current branch.
 - **Authors**: names, emails and commit counts.
+- **Conflicts**: shown while a file is conflicted or a merge or rebase is in progress. See **Conflicts** below.
 - **More**: tags, stashes, LFS details and locks.
 
 Action rules:
@@ -41,10 +42,22 @@ Action rules:
 - **Fetch** fetches from the default remote.
 - **Pull** follows `pull.rebase` and `pull.ff` from your git config: `pull.rebase=true` rebases, `pull.ff=only` fast-forwards only, otherwise it merges. The per-branch `branch.<name>.rebase` setting isn't read. Unity reimports the changed files afterwards.
 - **Switch branch** lists local branches and remote-only branches (picking one creates a local tracking branch). If git refuses because local changes would be overwritten, nothing is discarded.
-- **Conflicts, merge and rebase** are resolved outside the tool. Conflicted rows cannot be ticked, and Commit is disabled while any conflict exists and during a rebase, cherry-pick, revert or bisect. The window tells you to finish or abort it outside the tool.
+- **Conflicts** are resolved in the Conflicts tab (see below). Conflicted rows cannot be ticked, and Commit is disabled while any conflict exists. During a rebase it says "Continue or abort the rebase first". During a cherry-pick, revert or bisect the window tells you to finish or abort it outside the tool.
 - **During a merge**, every row is locked ticked and goes into the merge commit, including untracked and unrelated files. A `git commit` in a terminal would leave those out.
-- **Play Mode** disables Init, Pull and Switch. Commit, Push and Fetch stay available.
+- **Play Mode** disables Init, Pull, Switch and all conflict actions. Commit, Push and Fetch stay available.
 - UnityGit never discards local changes.
+
+## Conflicts
+
+The Conflicts tab appears while a file is conflicted or a merge or rebase is in progress. Pull's conflict message says "resolve them in Conflicts", and the outcome bar has a **Resolve conflicts** button.
+
+- Pick **Use A**, **Use B**, **A then B** or **B then A** for each conflict place, or for the whole file. Choices are a preview until you click **Apply**. Places left without a choice keep their conflict markers. When none remain, the file is staged.
+- Binary files and files deleted on one side offer only **Use A** and **Use B**, which take that side's whole file.
+- **Mark resolved** accepts a file you edited by hand. **Start over** restores the conflict markers (it asks first). **Open in editor** opens the file at the place.
+- **Merge**: **Finish merge** commits with git's own message (the Changes panel still commits with your message), and **Abort merge** cancels it. **Rebase**: **Continue rebase** and **Abort rebase**. Abort asks for confirmation. Abort and Continue rebase save assets and ask about modified scenes first.
+- Conflicts from a cherry-pick, revert or stash apply can have their files resolved here, but finishing or aborting the operation is done outside UnityGit.
+- Scenes and prefabs show a warning: picking places one by one can break them.
+- Pending choices are not kept across a script reload.
 
 ## Main toolbar buttons
 
@@ -54,7 +67,8 @@ Unity 6000.4 has no API for choosing an element's default visibility, so all fiv
 
 ## Limitations
 
-- No diff viewer, conflict-resolution UI or history graph.
+- No diff viewer or history graph.
+- No Unity-aware scene or prefab merging, no custom text for a conflict place, and no continue or abort for a cherry-pick or revert.
 - Stash, tag, remote and LFS-lock actions are not available; they are shown as information only.
 - No clone, no adding remotes and no credential UI (Git Credential Manager handles sign-in).
 - Git init does not write an LFS `.gitattributes`.

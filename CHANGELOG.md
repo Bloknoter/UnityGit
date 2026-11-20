@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.1.0] - 2026-11-20
+
+### Added
+
+- Conflicts tab, shown while a file is conflicted or a merge or rebase is in progress.
+- Per-place and whole-file choices (Use A, Use B, A then B, B then A), previewed until Apply; Use A and Use B for binary and deleted files.
+- Mark resolved, Start over and Open in editor.
+- Finish merge and Abort merge; Continue rebase and Abort rebase. Abort asks first and, with Continue rebase, handles unsaved assets and modified scenes.
+- Warning for scenes and prefabs.
+- "Resolve conflicts" button on the outcome bar.
+
+### Changed
+
+- Requires FlexGit 2.1.0.
+- Pull's conflict message now says "resolve them in Conflicts".
+- Commit during a rebase now says "Continue or abort the rebase first".
+
 ## [1.0.0] - 2026-11-19
 
 Initial release.
