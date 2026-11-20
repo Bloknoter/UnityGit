@@ -285,9 +285,9 @@ namespace UnityGit
                 case PullStatus.Rebased:
                     return new ActionOutcome(pull, OutcomeKind.Succeeded, "Pulled latest changes");
                 case PullStatus.Conflicts:
-                    var conflicted = Snapshot.Changes.Where(c => c.IsConflicted).Select(c => c.Path).ToList();
+                    var conflicted = Snapshot.ConflictedPaths;
                     return new ActionOutcome(pull, OutcomeKind.Failed,
-                        $"Pull stopped with conflicts in {OutcomeMessages.Files(conflicted.Count)} — resolve them outside UnityGit",
+                        $"Pull stopped with conflicts in {OutcomeMessages.Files(conflicted.Count)} — resolve them in Conflicts",
                         conflictedPaths: conflicted);
                 case PullStatus.LocalChangesWouldBeOverwritten:
                     // git's output names the blocking files (or, for a rebase pull, says the tree is dirty).

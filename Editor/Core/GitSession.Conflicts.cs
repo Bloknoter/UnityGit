@@ -110,6 +110,117 @@ namespace UnityGit
             return new ActionOutcome(restore, OutcomeKind.Succeeded, $"Put back the conflicts in {path}");
         });
 
+        /// <summary>Commits a finished merge, or carries on with a rebase. A rebase may stop again at its next commit.</summary>
+        public Task<ActionOutcome> ContinueAsync()
+            => RunAsync(GitAction.Continue, false, async (_, _) =>
+        {
+            const GitAction cont = GitAction.Continue;
+            var repo = _repo ?? throw new InvalidOperationException("Continue ran without an open repository.");
+
+            if (Snapshot.Operation == RepoOperation.Merging)
+            {
+                // A merge commit changes no files in the working tree, so there is nothing to save or reimport.
+                var merge = await RunGitOperationAsync(() => repo.ContinueMergeAsync());
+                switch (merge.Status)
+                {
+                    case MergeStatus.Merged:
+                        return new ActionOutcome(cont, OutcomeKind.Succeeded, "Merge finished");
+                    case MergeStatus.Conflicts:
+                        return Refused(cont, "Resolve all conflicts first");
+                    case MergeStatus.NoMergeInProgress:
+                        return Refused(cont, "No merge in progress");
+                    default:
+                        return FailedFrom(cont, merge.Error, merge.Message);
+                }
+            }
+
+            if (!SaveAssetsAndConfirmScenes())
+                return new ActionOutcome(cont, OutcomeKind.Cancelled, "Continue cancelled — modified scenes weren't saved");
+
+            var files = new FileChangeTracker();
+            var rebase = await RunGitOperationAsync(
+                () => files.TrackAsync(() => repo.Rebase.ContinueAsync(), r => r.Status == RebaseStatus.NoRebaseInProgress),
+                files);
+
+            switch (rebase.Status)
+            {
+                case RebaseStatus.Completed:
+                    return new ActionOutcome(cont, OutcomeKind.Succeeded, "Rebase finished");
+                case RebaseStatus.Conflicts when rebase.Error == null:
+                    // FlexGit's own check, before it ran git: conflicts are still left in this step.
+                    return Refused(cont, "Resolve all conflicts first");
+                case RebaseStatus.Conflicts:
+                    var conflicted = Snapshot.ConflictedPaths;
+                    return new ActionOutcome(cont, OutcomeKind.Failed,
+                        $"Rebase stopped again with conflicts in {OutcomeMessages.Files(conflicted.Count)} — resolve them in Conflicts",
+                        conflictedPaths: conflicted);
+                case RebaseStatus.LocalChangesWouldBeOverwritten:
+                    return new ActionOutcome(cont, OutcomeKind.Failed,
+                        "Rebase blocked: your local changes would be overwritten — commit or stash them first",
+                        OutcomeMessages.Details(rebase.Error));
+                case RebaseStatus.NoRebaseInProgress:
+                    return Refused(cont, "No rebase in progress");
+                default:
+                    return FailedFrom(cont, rebase.Error, rebase.Message);
+            }
+        });
+
+        /// <summary>Gives up on a merge or rebase and puts the branch back as it was. Asks first: the resolved conflicts are lost.</summary>
+        public Task<ActionOutcome> AbortAsync()
+            => RunAsync(GitAction.Abort, false, async (_, _) =>
+        {
+            const GitAction abort = GitAction.Abort;
+            var repo = _repo ?? throw new InvalidOperationException("Abort ran without an open repository.");
+            var merging = Snapshot.Operation == RepoOperation.Merging;
+            var noun = merging ? "merge" : "rebase";
+
+            if (!Hooks.Confirm($"Abort the {noun}?",
+                    $"The branch goes back to how it was before the {noun}. Conflicts you've resolved so far will be lost.", $"Abort {noun}"))
+                return new ActionOutcome(abort, OutcomeKind.Cancelled, "Abort cancelled");
+            if (!SaveAssetsAndConfirmScenes())
+                return new ActionOutcome(abort, OutcomeKind.Cancelled, "Abort cancelled — modified scenes weren't saved");
+
+            var files = new FileChangeTracker();
+            if (merging)
+            {
+                var merge = await RunGitOperationAsync(
+                    () => files.TrackAsync(() => repo.AbortMergeAsync(), r => r.Status == MergeStatus.NoMergeInProgress),
+                    files);
+                switch (merge.Status)
+                {
+                    case MergeStatus.Aborted:
+                        return new ActionOutcome(abort, OutcomeKind.Succeeded, "Merge aborted");
+                    case MergeStatus.NoMergeInProgress:
+                        return Refused(abort, "No merge in progress");
+                    default:
+                        return FailedFrom(abort, merge.Error, merge.Message);
+                }
+            }
+
+            var rebase = await RunGitOperationAsync(
+                () => files.TrackAsync(() => repo.Rebase.AbortAsync(), r => r.Status == RebaseStatus.NoRebaseInProgress),
+                files);
+            switch (rebase.Status)
+            {
+                case RebaseStatus.Aborted:
+                    return new ActionOutcome(abort, OutcomeKind.Succeeded, "Rebase aborted");
+                case RebaseStatus.NoRebaseInProgress:
+                    return Refused(abort, "No rebase in progress");
+                default:
+                    return FailedFrom(abort, rebase.Error, rebase.Message);
+            }
+        });
+
+        // Unity's unsaved assets and scenes are about to be overwritten by git: save them, and let the user stop first.
+        bool SaveAssetsAndConfirmScenes()
+        {
+            Hooks.SaveAssets();
+            return Hooks.ConfirmSaveModifiedScenes();
+        }
+
+        static ActionOutcome FailedFrom(GitAction action, GitError? error, string message)
+            => error != null ? OutcomeMessages.FromError(action, error) : new ActionOutcome(action, OutcomeKind.Failed, message);
+
         // Read fresh from git, not from the snapshot: another tool may have resolved the path since the last refresh.
         static async Task<StatusEntry?> FindConflictAsync(GitRepository repo, string path)
             => (await repo.Conflicts.ListAsync()).FirstOrDefault(e => string.Equals(e.Path, path, StringComparison.Ordinal));

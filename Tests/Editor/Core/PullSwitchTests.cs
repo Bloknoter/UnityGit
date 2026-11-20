@@ -95,7 +95,7 @@ namespace UnityGit.Tests
             var outcome = await s.PullAsync();
 
             Assert.That(outcome.Kind, Is.EqualTo(OutcomeKind.Failed));
-            Assert.That(outcome.Message, Is.EqualTo("Pull stopped with conflicts in 1 file — resolve them outside UnityGit"));
+            Assert.That(outcome.Message, Is.EqualTo("Pull stopped with conflicts in 1 file — resolve them in Conflicts"));
             Assert.That(outcome.ConflictedPaths, Is.EqualTo(new[] { "README.md" }));
             Assert.That(s.Snapshot.Operation, Is.EqualTo(RepoOperation.Merging));
             Assert.That(hooks.Count("RefreshAssets"), Is.EqualTo(1));

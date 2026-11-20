@@ -19,6 +19,20 @@ namespace UnityGit.Tests
             GitSandbox.EnsurePushed(await Teammate.PushAsync());
             await GitSandbox.CommitFileAsync(Local, "README.md", "local line\n", "local edit");
         }
+
+        // Teammate changes README.md and adds other.txt in one commit. Local commits README.md, then adds other.txt, so a
+        // rebase pull stops at the first commit (README.md) and, after Continue, at the second (other.txt, add/add).
+        public async Task PrepareTwoStepRebaseConflictAsync()
+        {
+            GitSandbox.WriteFile(Teammate, "README.md", "teammate line\n");
+            GitSandbox.WriteFile(Teammate, "other.txt", "teammate other\n");
+            await Teammate.Index.StageAsync(new[] { "README.md", "other.txt" });
+            var commit = await Teammate.CommitAsync("teammate edit");
+            if (!commit.Succeeded) throw new InvalidOperationException("Commit failed: " + commit.Message);
+            GitSandbox.EnsurePushed(await Teammate.PushAsync());
+            await GitSandbox.CommitFileAsync(Local, "README.md", "local line\n", "local edit");
+            await GitSandbox.CommitFileAsync(Local, "other.txt", "local other\n", "local other");
+        }
     }
 
     internal sealed class GitSandbox : IDisposable
