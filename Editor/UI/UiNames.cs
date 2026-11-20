@@ -15,6 +15,7 @@ namespace UnityGit.UI
         public const string Outcome = "unitygit-outcome";
         public const string OutcomeDismiss = "unitygit-outcome-dismiss";
         public const string OutcomeConflicts = "unitygit-outcome-conflicts";
+        public const string OutcomeResolve = "unitygit-outcome-resolve";
         public const string InitButton = "unitygit-init-button";
         public const string NotRepo = "unitygit-not-repo";
         public const string GitMissing = "unitygit-git-missing";
@@ -32,6 +33,25 @@ namespace UnityGit.UI
         public const string ChangesSummary = "unitygit-changes-summary";
         public const string CommitMessage = "unitygit-commit-message";
         public const string CommitSubmit = "unitygit-commit-submit";
+        public const string ConflictsTitle = "unitygit-conflicts-title";
+        public const string ConflictsSummary = "unitygit-conflicts-summary";
+        public const string ConflictsNote = "unitygit-conflicts-note";
+        public const string ConflictsContinue = "unitygit-conflicts-continue";
+        public const string ConflictsAbort = "unitygit-conflicts-abort";
+        public const string ConflictsFiles = "unitygit-conflicts-files";
+        public const string ConflictFileTitle = "unitygit-conflict-file-title";
+        public const string ConflictFileType = "unitygit-conflict-file-type";
+        public const string ConflictFileNote = "unitygit-conflict-file-note";
+        public const string ConflictSceneWarning = "unitygit-conflict-scene-warning";
+        public const string ConflictWholeFile = "unitygit-conflict-whole-file";
+        public const string ConflictPlaces = "unitygit-conflict-places";
+        /// <summary>A place element's name is this followed by the place's index.</summary>
+        public const string ConflictPlacePrefix = "unitygit-conflict-place-";
+        public const string ConflictPlaceButtons = "unitygit-conflict-place-buttons";
+        public const string ConflictApply = "unitygit-conflict-apply";
+        public const string ConflictMarkResolved = "unitygit-conflict-mark-resolved";
+        public const string ConflictStartOver = "unitygit-conflict-start-over";
+        public const string ConflictOpenEditor = "unitygit-conflict-open-editor";
         public const string LocalBranches = "unitygit-local-branches";
         public const string RemoteBranches = "unitygit-remote-branches";
         public const string HistoryList = "unitygit-history";

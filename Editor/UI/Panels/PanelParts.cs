@@ -37,6 +37,9 @@ namespace UnityGit.UI
     {
         public static string Files(int n) => n == 1 ? "1 file" : $"{n} files";
 
+        // Core's OutcomeMessages.Places says the same, but Core's internals are hidden from this assembly (they mention FlexGit).
+        public static string Places(int n) => n == 1 ? "1 place" : $"{n} places";
+
         public static string Count(int n) => n.ToString(CultureInfo.InvariantCulture);
 
         static readonly char[] AuthorityEnd = { '/', '?', '#' };

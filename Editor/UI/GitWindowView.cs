@@ -9,7 +9,7 @@ using UnityGit.UI.Theme;
 
 namespace UnityGit.UI
 {
-    public enum WindowTab { Overview, Changes, Branches, History, Authors, More }
+    public enum WindowTab { Overview, Changes, Conflicts, Branches, History, Authors, More }
 
     /// <summary>
     /// The window's content (spec §5.7), built in code so it can be created and tested without an EditorWindow.
@@ -27,6 +27,7 @@ namespace UnityGit.UI
         readonly GitSession _session;
         readonly Dictionary<WindowTab, Func<GitSession, VisualElement>> _factories = new Dictionary<WindowTab, Func<GitSession, VisualElement>>();
         readonly Dictionary<WindowTab, VisualElement> _panels = new Dictionary<WindowTab, VisualElement>();
+        readonly List<WindowTab> _visibleTabs = new List<WindowTab>(); // the nav's items
 
         readonly ToolbarMenu _branchMenu;
         readonly Button _commitButton;
@@ -40,6 +41,7 @@ namespace UnityGit.UI
         readonly VisualElement _outcomeBar;
         readonly Label _outcomeMessage;
         readonly Foldout _outcomeConflicts;
+        readonly Button _outcomeResolve;
         readonly Foldout _outcomeDetails;
         readonly Label _outcomeDetailsText;
         ActionOutcome? _shownOutcome;
@@ -91,6 +93,8 @@ namespace UnityGit.UI
             _outcomeMessage = new Label { name = UiNames.Outcome };
             _outcomeMessage.AddToClassList(EditorUiClasses.MessageText);
             _outcomeConflicts = new Foldout { name = UiNames.OutcomeConflicts };
+            _outcomeResolve = Primary(new Button(() => SelectTab(WindowTab.Conflicts)) { name = UiNames.OutcomeResolve, text = "Resolve conflicts" });
+            _outcomeResolve.AddToClassList("unitygit-outcome-resolve");
             _outcomeDetails = new Foldout { text = "Details", value = false };
             _outcomeDetailsText = new Label();
             _outcomeDetailsText.AddToClassList(EditorUiClasses.Mono);
@@ -99,6 +103,7 @@ namespace UnityGit.UI
             _outcomeDetailsText.selection.isSelectable = true; // so git's message can be copied
             _outcomeDetails.Add(_outcomeDetailsText);
             outcomeContent.Add(_outcomeMessage);
+            outcomeContent.Add(_outcomeResolve);
             outcomeContent.Add(_outcomeConflicts);
             outcomeContent.Add(_outcomeDetails);
             _outcomeBar.Add(outcomeContent);
@@ -120,6 +125,7 @@ namespace UnityGit.UI
             RegisterCallback<DetachFromPanelEvent>(_ => _session.Changed -= Render);
             _factories[WindowTab.Overview] = session => new OverviewPanel(session);
             _factories[WindowTab.Changes] = session => new ChangesPanel(session);
+            _factories[WindowTab.Conflicts] = session => new ConflictsPanel(session);
             _factories[WindowTab.Branches] = session => new BranchesPanel(session);
             _factories[WindowTab.History] = session => new HistoryPanel(session);
             _factories[WindowTab.Authors] = session => new AuthorsPanel(session);
@@ -128,6 +134,9 @@ namespace UnityGit.UI
         }
 
         public WindowTab SelectedTab { get; private set; }
+
+        /// <summary>The tabs in the nav: all of them, with Conflicts only while it has something to show.</summary>
+        internal IReadOnlyList<WindowTab> VisibleTabs => _visibleTabs;
 
         public void SelectTab(WindowTab tab)
         {
@@ -139,9 +148,24 @@ namespace UnityGit.UI
         internal void Render()
         {
             var s = _session.Snapshot;
+            UpdateVisibleTabs(s);
             RenderToolbar(s);
             RenderOutcome();
             RenderBody(s);
+        }
+
+        // Spec §5.1: Conflicts shows while a file is conflicted or a merge or rebase is in progress. When it goes away while
+        // selected, Changes is selected instead.
+        void UpdateVisibleTabs(RepoSnapshot s)
+        {
+            var conflicts = s.ConflictedPaths.Count > 0 || s.Operation == RepoOperation.Merging || s.Operation == RepoOperation.Rebasing;
+            if (_visibleTabs.Count == 0 || _visibleTabs.Contains(WindowTab.Conflicts) != conflicts)
+            {
+                _visibleTabs.Clear();
+                foreach (var tab in Tabs)
+                    if (tab != WindowTab.Conflicts || conflicts) _visibleTabs.Add(tab);
+            }
+            if (!conflicts && SelectedTab == WindowTab.Conflicts) SelectedTab = WindowTab.Changes;
         }
 
         /// <summary>
@@ -196,6 +220,8 @@ namespace UnityGit.UI
         {
             var outcome = _session.LastOutcome;
             SetDisplayed(_outcomeBar, outcome != null);
+            // Checked on every render: a refresh can find the conflicts gone (resolved elsewhere) and the tab with them.
+            SetDisplayed(_outcomeResolve, outcome != null && outcome.ConflictedPaths.Count > 0 && _visibleTabs.Contains(WindowTab.Conflicts));
             if (outcome == null || ReferenceEquals(outcome, _shownOutcome)) return; // outcomes are immutable
             _shownOutcome = outcome;
 
@@ -271,20 +297,20 @@ namespace UnityGit.UI
 
         Action BuildReadyBody()
         {
-            // The nav is a kit card listing the tabs; Changes carries a count badge that hides at 0.
+            // The nav is a kit card listing the visible tabs; Changes and Conflicts carry count badges that hide at 0.
             var nav = new ListView
             {
                 name = UiNames.Nav,
-                itemsSource = Tabs,
+                itemsSource = _visibleTabs,
                 selectionType = SelectionType.Single,
                 fixedItemHeight = 28,
                 makeItem = () => new NavRow(),
-                bindItem = (item, i) => ((NavRow)item).Bind(TabLabel(Tabs[i]), TabBadge(Tabs[i])),
+                bindItem = (item, i) => ((NavRow)item).Bind(TabLabel(_visibleTabs[i]), TabBadge(_visibleTabs[i]), TabBadgeTone(_visibleTabs[i])),
             };
             nav.AddToClassList(EditorUiClasses.Card);
             nav.selectedIndicesChanged += _ =>
             {
-                if (nav.selectedIndex >= 0) SelectTab(Tabs[nav.selectedIndex]);
+                if (nav.selectedIndex >= 0 && nav.selectedIndex < _visibleTabs.Count) SelectTab(_visibleTabs[nav.selectedIndex]);
             };
             var host = new VisualElement { name = UiNames.PanelHost };
             var split = new VisualElement();
@@ -293,16 +319,17 @@ namespace UnityGit.UI
             split.Add(host);
             _body.Add(split);
 
-            var shownChanges = -1;
+            var shownNav = (-1, -1, -1);
             return () =>
             {
-                var changes = _session.Snapshot.Changes.Count;
-                if (changes != shownChanges)
+                var s = _session.Snapshot;
+                var navState = (_visibleTabs.Count, s.Changes.Count, s.ConflictedPaths.Count);
+                if (navState != shownNav)
                 {
-                    shownChanges = changes;
-                    nav.RefreshItems(); // rebinds the Changes badge
+                    shownNav = navState;
+                    nav.RefreshItems(); // the rows (Conflicts comes and goes) and their badges
                 }
-                nav.SetSelectionWithoutNotify(new[] { Array.IndexOf(Tabs, SelectedTab) });
+                nav.SetSelectionWithoutNotify(new[] { _visibleTabs.IndexOf(SelectedTab) });
 
                 var existed = _panels.ContainsKey(SelectedTab);
                 var panel = PanelFor(SelectedTab);
@@ -327,12 +354,19 @@ namespace UnityGit.UI
 
         static string TabLabel(WindowTab tab) => tab.ToString();
 
-        /// <summary>The nav badge for <paramref name="tab"/>: the change count on Changes; null (hidden) at 0 and elsewhere.</summary>
+        /// <summary>
+        /// The nav badge for <paramref name="tab"/>: the change count on Changes, the conflicted path count on Conflicts;
+        /// null (hidden) at 0 and elsewhere.
+        /// </summary>
         internal string? TabBadge(WindowTab tab)
         {
-            var changes = _session.Snapshot.Changes.Count;
-            return tab == WindowTab.Changes && changes > 0 ? PanelParts.Count(changes) : null;
+            var s = _session.Snapshot;
+            var count = tab == WindowTab.Changes ? s.Changes.Count : tab == WindowTab.Conflicts ? s.ConflictedPaths.Count : 0;
+            return count > 0 ? PanelParts.Count(count) : null;
         }
+
+        /// <summary>The nav badge's tone: the error tone on Conflicts, the accent elsewhere.</summary>
+        internal EditorUiTone TabBadgeTone(WindowTab tab) => tab == WindowTab.Conflicts ? EditorUiTone.Error : EditorUiTone.Accent;
 
         /// <summary>The outcome message's tone: success, error, or warning for a cancelled or refused action.</summary>
         internal static EditorUiTone OutcomeTone(OutcomeKind kind)
@@ -400,10 +434,10 @@ namespace UnityGit.UI
                 Add(_badge);
             }
 
-            public void Bind(string text, string? badge)
+            public void Bind(string text, string? badge, EditorUiTone tone)
             {
                 _name.text = text;
-                EditorUiElements.SetBadge(_badge, badge ?? string.Empty, EditorUiTone.Accent);
+                EditorUiElements.SetBadge(_badge, badge ?? string.Empty, tone);
                 SetDisplayed(_badge, badge != null);
             }
         }

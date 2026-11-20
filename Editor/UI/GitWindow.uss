@@ -108,6 +108,14 @@
     white-space: normal;
 }
 
+.unitygit-window .unitygit-outcome-resolve {
+    align-self: flex-start;
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: var(--ed-space-1);
+    margin-bottom: 0;
+}
+
 /* Body: a centred card for No repository / Git missing / Git can't open it / Loading, else the nav and the panel. */
 
 .unitygit-body {
@@ -411,6 +419,262 @@
 }
 
 .unitygit-window .unitygit-commit-actions > .unity-button {
+    min-width: 96px;
+    margin-right: 0;
+}
+
+/* Conflicts: a header card, the file list (a short card of fixed height) and the selected file's card, which fills the
+   rest. The file's places sit in a dark, code-like scroll area: unchanged context lines, then each place as a block whose
+   left edge says whether it has a pick (warning: not chosen; success: chosen). The selected place is outlined in the
+   accent and shows the two sides and the pick buttons. These rules come last so they win ties with the panel rules. */
+
+.unitygit-window .unitygit-conflicts-header > .ed-card__content {
+    padding-top: var(--ed-space-2);
+    padding-bottom: var(--ed-space-2);
+}
+
+.unitygit-conflicts-headline {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+.unitygit-conflicts-title {
+    flex-shrink: 0;
+    font-size: var(--ed-font-l);
+    padding-left: 0;
+    margin-right: var(--ed-space-2);
+}
+
+.unitygit-conflicts-summary {
+    flex-grow: 1;
+    flex-shrink: 1;
+    padding-left: 0;
+}
+
+.unitygit-window .unitygit-conflicts-headline > .unity-button {
+    margin-left: var(--ed-space-1);
+    margin-right: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.unitygit-conflicts-note {
+    white-space: normal;
+    padding-left: 0;
+    padding-right: 0;
+    margin-top: var(--ed-space-1);
+}
+
+.unitygit-window .ed-card.unitygit-conflicts-files-card {
+    flex-grow: 0;
+    flex-shrink: 0;
+    height: 122px;
+    min-height: 0;
+}
+
+.unitygit-conflicts-path {
+    flex-grow: 1;
+}
+
+.unitygit-window .unitygit-conflict-file > .ed-card__content {
+    flex-grow: 1;
+    flex-shrink: 1;
+    padding-bottom: var(--ed-space-2);
+}
+
+.unitygit-conflict-file-title {
+    flex-shrink: 0;
+    padding-left: 0;
+}
+
+.unitygit-conflict-file-type {
+    flex-shrink: 0;
+    padding-left: 0;
+    margin-bottom: var(--ed-space-2);
+}
+
+.unitygit-conflict-whole-file {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+    margin-bottom: var(--ed-space-2);
+}
+
+.unitygit-conflict-whole-file-caption {
+    flex-shrink: 0;
+    padding-left: 0;
+    margin-right: var(--ed-space-1);
+}
+
+.unitygit-conflict-options {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    flex-shrink: 1;
+}
+
+.unitygit-window .unitygit-conflict-options > .unity-button {
+    margin-left: 0;
+    margin-right: var(--ed-space-1);
+    margin-top: 2px;
+    margin-bottom: 2px;
+}
+
+.unitygit-window .unity-button.unitygit-conflict-option--picked {
+    color: var(--ed-accent-text);
+    background-color: var(--ed-accent-tint);
+    border-color: var(--ed-accent);
+}
+
+.unitygit-conflict-places {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-height: 60px;
+    margin-bottom: var(--ed-space-2);
+    padding-top: 2px;
+    padding-bottom: 2px;
+    background-color: var(--ed-input-bg);
+    border-width: 1px;
+    border-color: var(--ed-border);
+    border-radius: var(--ed-radius-s);
+}
+
+/* File text: monospace (the kit's mono class), kept as typed, wrapped only where the panel is too narrow. */
+.unitygit-conflict-code {
+    white-space: pre-wrap;
+    font-size: var(--ed-font-s);
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-left: var(--ed-space-2);
+    padding-right: var(--ed-space-2);
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.unitygit-conflict-context {
+    color: var(--ed-text-muted);
+}
+
+.unitygit-conflict-collapsed,
+.unitygit-conflict-more {
+    -unity-font-style: italic;
+    padding-left: var(--ed-space-2);
+    padding-top: 1px;
+    padding-bottom: 1px;
+}
+
+.unitygit-conflict-place {
+    flex-shrink: 0;
+    margin-left: var(--ed-space-1);
+    margin-right: var(--ed-space-1);
+    margin-top: 2px;
+    margin-bottom: 2px;
+    padding-left: var(--ed-space-2);
+    padding-right: var(--ed-space-2);
+    padding-top: var(--ed-space-1);
+    padding-bottom: var(--ed-space-1);
+    background-color: var(--ed-surface);
+    border-left-width: 3px;
+    border-right-width: 1px;
+    border-top-width: 1px;
+    border-bottom-width: 1px;
+    border-left-color: var(--ed-warning);
+    border-right-color: var(--ed-border);
+    border-top-color: var(--ed-border);
+    border-bottom-color: var(--ed-border);
+    border-radius: var(--ed-radius-s);
+}
+
+.unitygit-conflict-place:hover {
+    background-color: var(--ed-surface-hover);
+}
+
+.unitygit-conflict-place.unitygit-conflict-place--chosen {
+    border-left-color: var(--ed-success);
+}
+
+.unitygit-conflict-place.unitygit-conflict-place--selected {
+    background-color: var(--ed-surface-2);
+    border-right-color: var(--ed-accent-border);
+    border-top-color: var(--ed-accent-border);
+    border-bottom-color: var(--ed-accent-border);
+}
+
+.unitygit-conflict-place-header {
+    flex-direction: row;
+    align-items: center;
+}
+
+.unitygit-conflict-place-title {
+    flex-grow: 1;
+    flex-shrink: 1;
+    padding-left: 0;
+}
+
+.unitygit-window .unitygit-conflict-place-header > .ed-chip {
+    margin-right: 0;
+    margin-bottom: 0;
+}
+
+.unitygit-conflict-place-detail {
+    margin-top: var(--ed-space-1);
+}
+
+.unitygit-conflict-side,
+.unitygit-conflict-preview-box {
+    margin-top: 2px;
+    margin-bottom: 2px;
+    padding-bottom: 2px;
+    background-color: var(--ed-input-bg);
+    border-left-width: 2px;
+    border-radius: var(--ed-radius-s);
+}
+
+.unitygit-conflict-side--ours {
+    border-left-color: var(--ed-info);
+}
+
+.unitygit-conflict-side--base {
+    border-left-color: var(--ed-neutral);
+}
+
+.unitygit-conflict-side--theirs {
+    border-left-color: var(--ed-accent);
+}
+
+.unitygit-conflict-preview-box {
+    margin-top: var(--ed-space-1);
+    padding-top: 2px;
+    border-left-color: var(--ed-success);
+}
+
+.unitygit-conflict-side-caption {
+    padding-left: var(--ed-space-2);
+    padding-top: 2px;
+    padding-bottom: 0;
+}
+
+.unitygit-window .unitygit-conflict-place-detail > .unitygit-conflict-options {
+    margin-top: var(--ed-space-1);
+}
+
+.unitygit-conflict-actions {
+    flex-direction: row;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.unitygit-window .unitygit-conflict-actions > .unity-button {
+    margin-left: 0;
+    margin-right: var(--ed-space-1);
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.unitygit-window .unitygit-conflict-actions > #unitygit-conflict-apply {
     min-width: 96px;
     margin-right: 0;
 }
