@@ -124,6 +124,20 @@ namespace UnityGit.Tests
             Assert.That(_hooks.Calls, Does.Contain("RefreshAssets"));
         }
 
+        // Taking a whole side would drop the hand merge and the changes git merged cleanly from the other side (spec §3).
+        [Test] public async Task UseSide_HandResolvedText_Refused()
+        {
+            await MergeAsync(ConflictScenarios.TwoPlaces);
+            File.WriteAllText(FilePath("f.txt"), "fixed\n");
+            var f = await Load("f.txt");
+
+            var o = await _s.UseSideAsync(f, true);
+
+            Assert.That((o.Kind, o.Message), Is.EqualTo((OutcomeKind.Refused, "Mark it resolved, or start over to pick again")));
+            Assert.That(Read("f.txt"), Is.EqualTo("fixed\n"));
+            Assert.That(_hooks.Calls, Does.Not.Contain("Begin"));
+        }
+
         [Test] public async Task UseSide_DeletedByThem_TheirsDeletesFile()
         {
             await MergeAsync(ConflictScenarios.DeletedByThem);

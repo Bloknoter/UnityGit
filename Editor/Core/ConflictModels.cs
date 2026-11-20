@@ -9,6 +9,13 @@ namespace UnityGit
 
     public enum ConflictPick { Ours, Theirs, OursThenTheirs, TheirsThenOurs }
 
+    /// <summary>What a <see cref="ConflictType"/> means, for the session's actions and the window alike.</summary>
+    public static class ConflictTypes
+    {
+        /// <summary>Both sides changed (or added) the file, so git merged it and a text file can have places.</summary>
+        public static bool ChangedOnBothSides(ConflictType type) => type == ConflictType.BothModified || type == ConflictType.BothAdded;
+    }
+
     public sealed class ConflictFileInfo
     {
         public string Path { get; internal set; } = "";

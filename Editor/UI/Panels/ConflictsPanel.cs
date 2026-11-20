@@ -42,6 +42,7 @@ namespace UnityGit.UI
         readonly Label _fileType;
         readonly VisualElement _fileNote;
         readonly VisualElement _sceneWarning;
+        readonly VisualElement _wholeFile;
         readonly VisualElement _wholeFileButtons;
         readonly ScrollView _places;
         readonly List<ConflictPlaceView> _placeViews = new List<ConflictPlaceView>();
@@ -100,12 +101,12 @@ namespace UnityGit.UI
                 "Scenes and prefabs can break when places are picked one by one. Check the file opens in Unity before you finish.",
                 EditorUiTone.Warning);
             Named(MessageLabel(_sceneWarning), UiNames.ConflictSceneWarning);
-            var wholeFile = new VisualElement { name = UiNames.ConflictWholeFile };
-            wholeFile.AddToClassList("unitygit-conflict-whole-file");
-            wholeFile.Add(PanelParts.Text("Whole file:", EditorUiClasses.Muted, "unitygit-conflict-whole-file-caption"));
+            _wholeFile = new VisualElement { name = UiNames.ConflictWholeFile };
+            _wholeFile.AddToClassList("unitygit-conflict-whole-file");
+            _wholeFile.Add(PanelParts.Text("Whole file:", EditorUiClasses.Muted, "unitygit-conflict-whole-file-caption"));
             _wholeFileButtons = new VisualElement();
             _wholeFileButtons.AddToClassList("unitygit-conflict-options");
-            wholeFile.Add(_wholeFileButtons);
+            _wholeFile.Add(_wholeFileButtons);
             _places = new ScrollView(ScrollViewMode.Vertical) { name = UiNames.ConflictPlaces, horizontalScrollerVisibility = ScrollerVisibility.Hidden };
             _places.AddToClassList("unitygit-conflict-places");
 
@@ -128,7 +129,7 @@ namespace UnityGit.UI
             _fileCard.Add(_fileType);
             _fileCard.Add(_fileNote);
             _fileCard.Add(_sceneWarning);
-            _fileCard.Add(wholeFile);
+            _fileCard.Add(_wholeFile);
             _fileCard.Add(_places);
             _fileCard.Add(actions);
             Add(_fileCard);
@@ -233,7 +234,7 @@ namespace UnityGit.UI
         internal void PickSide(bool ours)
         {
             var file = File;
-            if (file == null || file.Places.Count > 0) return;
+            if (file == null || file.Places.Count > 0 || HandResolved(file.Info)) return;
             PicksFor(file).Side = ours;
             ShowPicks();
         }
@@ -505,12 +506,14 @@ namespace UnityGit.UI
             var hasPlaces = file.Places.Count > 0;
             var picked = hasPlaces ? PicksOf(file)?.ByPlace.Count > 0 : SidePick != null;
             SetEnabled(_apply, resolve.Enabled && picked,
-                !resolve.Enabled ? resolve.Reason : hasPlaces ? "Pick an option for at least one place" : "Pick a side first");
+                !resolve.Enabled ? resolve.Reason
+                : hasPlaces ? "Pick an option for at least one place"
+                : HandResolved(info) ? "Mark it resolved, or start over to pick again"
+                : "Pick a side first");
             SetEnabled(_markResolved, resolve.Enabled, resolve.Reason);
 
             var restore = _session.GetAvailability(GitAction.RestoreConflict);
-            var bothSides = info.Type == ConflictType.BothModified || info.Type == ConflictType.BothAdded;
-            SetEnabled(_startOver, restore.Enabled && bothSides,
+            SetEnabled(_startOver, restore.Enabled && ConflictTypes.ChangedOnBothSides(info.Type),
                 !restore.Enabled ? restore.Reason : "Only files changed on both sides can start over");
 
             SetEnabled(_openEditor, info.ExistsInWorkingTree && !info.IsBinary,
@@ -537,6 +540,10 @@ namespace UnityGit.UI
             if (note != null) EditorUiElements.SetMessage(_fileNote, note, info.HasMalformedMarkers ? EditorUiTone.Warning : EditorUiTone.Info);
             PanelParts.SetDisplayed(_fileNote, note != null);
             PanelParts.SetDisplayed(_sceneWarning, file.IsSceneOrPrefab);
+
+            var handResolved = HandResolved(info);
+            PanelParts.SetDisplayed(_wholeFile, !handResolved);
+            if (handResolved) return; // Mark resolved finishes it; the note says so
 
             if (file.Places.Count == 0)
             {
@@ -573,13 +580,16 @@ namespace UnityGit.UI
         {
             if (info.HasMalformedMarkers)
                 return "The conflict markers in this file can't be read as places — use one side, or fix it in your editor and mark it resolved.";
-            // The markers were removed by hand. A file deleted on a side has no places to begin with; its type text and the
-            // two Use buttons say what to do.
-            var bothSides = info.Type == ConflictType.BothModified || info.Type == ConflictType.BothAdded;
-            if (!info.IsBinary && info.ExistsInWorkingTree && !info.HasPlaces && bothSides)
-                return "No conflict places left — mark it resolved if it looks right.";
+            // A file deleted on a side has no places to begin with; its type text and the two Use buttons say what to do.
+            if (HandResolved(info)) return "No conflict places left — mark it resolved if it looks right.";
             return null;
         }
+
+        // A text file changed on both sides whose markers were removed by hand. Mark resolved finishes it; a whole side isn't
+        // offered (the session refuses it too): it would drop the hand merge and the changes git merged cleanly from the
+        // other side (spec §3).
+        static bool HandResolved(ConflictFileInfo info)
+            => ConflictTypes.ChangedOnBothSides(info.Type) && !info.IsBinary && !info.HasMalformedMarkers && info.ExistsInWorkingTree && !info.HasPlaces;
 
         // Whether taking that side's whole file deletes the file: that side has no file.
         static bool RemovedBy(ConflictType type, bool ours)

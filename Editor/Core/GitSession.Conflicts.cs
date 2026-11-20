@@ -42,15 +42,25 @@ namespace UnityGit
             }
         });
 
-        /// <summary>Takes one side's whole file. Only for a file without places: a binary file, or one deleted on a side.</summary>
+        /// <summary>
+        /// Takes one side's whole file. Only for a file without places: a binary file (an LFS pointer too), one deleted on a
+        /// side, or one whose markers can't be read. A text file changed on both sides whose markers were removed by hand is
+        /// refused: its whole side would drop the hand merge and the changes git merged cleanly from the other side.
+        /// </summary>
         public Task<ActionOutcome> UseSideAsync(ConflictFileView file, bool ours)
             => RunAsync(GitAction.Resolve, false, async (_, _) =>
         {
             const GitAction resolve = GitAction.Resolve;
-            var path = file.Info.Path;
+            var info = file.Info;
+            var path = info.Path;
             var repo = _repo ?? throw new InvalidOperationException("Resolve ran without an open repository.");
-            if (await FindConflictAsync(repo, path) == null) return NoLongerConflicted(resolve, path);
-            if (file.Info.HasPlaces) return Refused(resolve, "Pick options for the places instead");
+            var entry = await FindConflictAsync(repo, path);
+            if (entry == null) return NoLongerConflicted(resolve, path);
+            if (info.HasPlaces) return Refused(resolve, "Pick options for the places instead");
+            // The type as git reports it now; the rest as the file was shown.
+            if (ConflictTypes.ChangedOnBothSides(ConflictLoader.ToType(entry.Conflict))
+                && !info.IsBinary && !info.HasMalformedMarkers && info.ExistsInWorkingTree)
+                return Refused(resolve, "Mark it resolved, or start over to pick again");
 
             var files = new FileChangeTracker();
             await RunGitOperationAsync(

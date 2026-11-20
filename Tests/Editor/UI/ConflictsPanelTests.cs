@@ -325,6 +325,23 @@ namespace UnityGit.Tests
             Assert.That(IsDisplayed(LabelNamed(p, UiNames.ConflictFileNote)), Is.False, "no \"No conflict places left\" note: nothing was resolved by hand");
         }
 
+        // Markers removed by hand: Use A/B would drop the hand merge, so only Mark resolved (and Start over) are offered.
+        [Test] public async Task HandResolvedFile_OffersNoWholeSide()
+        {
+            await MergeAsync(ConflictScenarios.TwoPlaces);
+            File.WriteAllText(FilePath("f.txt"), "fixed\n");
+
+            var p = await PanelAsync();
+
+            Assert.That(p.File!.Places, Is.Empty, "setup: the markers were removed by hand");
+            Assert.That(ButtonTexts(p.Q(UiNames.ConflictWholeFile)), Is.Empty);
+            var note = LabelNamed(p, UiNames.ConflictFileNote);
+            Assert.That(IsDisplayed(note), Is.True);
+            Assert.That(note.text, Is.EqualTo("No conflict places left — mark it resolved if it looks right."));
+            Assert.That(ButtonNamed(p, UiNames.ConflictMarkResolved).enabledSelf, Is.True);
+            Assert.That(ButtonNamed(p, UiNames.ConflictStartOver).enabledSelf, Is.True);
+        }
+
         [Test] public async Task SceneFile_ShowsTheWarning()
         {
             await MergeAsync(ConflictScenarios.TwoPlaces, ConflictScenarios.Scene);
