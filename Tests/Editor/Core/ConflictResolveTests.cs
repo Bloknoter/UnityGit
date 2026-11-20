@@ -26,9 +26,20 @@ namespace UnityGit.Tests
             await _s.RefreshAsync();
         }
 
+        // MergeAsync with git-lfs tracking *.bin; ignored where git-lfs isn't installed.
+        async Task LfsMergeAsync(params ConflictFile[] files)
+        {
+            _repo = await _sb.InitRepoAsync("repo");
+            if (!_repo.Lfs.IsInstalled) Assert.Ignore("git-lfs not installed");
+            await ConflictScenarios.LfsMergeAsync(_repo, files);
+            _s = _sb.CreateSession(_repo.WorkingDirectory, _hooks);
+            await _s.RefreshAsync();
+        }
+
         async Task<ConflictFileView> Load(string path) => (await _s.LoadConflictFileAsync(path))!;
         string FilePath(string path) => Path.Combine(_repo.WorkingDirectory, path);
         string Read(string path) => File.ReadAllText(FilePath(path));
+        string ReadBytes(string path) => Encoding.GetEncoding("ISO-8859-1").GetString(File.ReadAllBytes(FilePath(path)));
 
         static Dictionary<int, ConflictPick> Picks(params (int, ConflictPick)[] picks)
         {
@@ -136,6 +147,34 @@ namespace UnityGit.Tests
             Assert.That((o.Kind, o.Message), Is.EqualTo((OutcomeKind.Refused, "Mark it resolved, or start over to pick again")));
             Assert.That(Read("f.txt"), Is.EqualTo("fixed\n"));
             Assert.That(_hooks.Calls, Does.Not.Contain("Begin"));
+        }
+
+        // FlexGit reads an LFS pointer conflict as text with one place. UnityGit treats it as binary: a whole side goes
+        // through git checkout, whose LFS filter puts back the real file instead of pointer text.
+        [Test] public async Task UseSide_LfsPointer_RestoresBinary()
+        {
+            await LfsMergeAsync(ConflictScenarios.Binary);
+            Assert.That(Read("img.bin"), Does.StartWith("version https://git-lfs.github.com/spec/v1\n<<<<<<<"), "setup: pointer text with markers");
+            var f = await Load("img.bin");
+
+            var o = await _s.UseSideAsync(f, false);
+
+            Assert.That(o.Kind, Is.EqualTo(OutcomeKind.Succeeded), o.Message);
+            Assert.That(ReadBytes("img.bin"), Is.EqualTo("B\0feature"));
+            Assert.That(_s.Snapshot.ConflictedPaths, Is.Empty);
+        }
+
+        // Picking the pointer's one place would leave pointer text in the working tree, so it is refused like any file
+        // shown without places.
+        [Test] public async Task ApplyPicks_LfsPointer_Refused()
+        {
+            await LfsMergeAsync(ConflictScenarios.Binary);
+            var before = Read("img.bin");
+
+            var o = await _s.ApplyPicksAsync(await Load("img.bin"), Picks((0, ConflictPick.Ours)));
+
+            Assert.That((o.Kind, o.Message), Is.EqualTo((OutcomeKind.Refused, "Pick an option for at least one place")));
+            Assert.That(Read("img.bin"), Is.EqualTo(before));
         }
 
         [Test] public async Task UseSide_DeletedByThem_TheirsDeletesFile()

@@ -547,7 +547,7 @@ namespace UnityGit.UI
 
             if (file.Places.Count == 0)
             {
-                // Binary, deleted on a side, or markers that can't be read: only a whole side can be taken.
+                // Binary (an LFS pointer too), deleted on a side, or markers that can't be read: only a whole side can be taken.
                 _useOurs = OptionButton(SideText(file.OursName, RemovedBy(info.Type, ours: true)), () => PickSide(true));
                 _useTheirs = OptionButton(SideText(file.TheirsName, RemovedBy(info.Type, ours: false)), () => PickSide(false));
                 _wholeFileButtons.Add(_useOurs);

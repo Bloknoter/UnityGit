@@ -17,7 +17,8 @@ namespace UnityGit
         {
             const GitAction resolve = GitAction.Resolve;
             var path = file.Info.Path;
-            if (picks.Count == 0) return Refused(resolve, "Pick an option for at least one place");
+            // A file shown without places (an LFS pointer is, though FlexGit reads one) has none to pick.
+            if (picks.Count == 0 || !file.Info.HasPlaces) return Refused(resolve, "Pick an option for at least one place");
             var repo = _repo ?? throw new InvalidOperationException("Resolve ran without an open repository.");
             if (await FindConflictAsync(repo, path) == null) return NoLongerConflicted(resolve, path);
 

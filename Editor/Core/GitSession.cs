@@ -108,7 +108,7 @@ namespace UnityGit
             if (repo == null || Snapshot.Availability != RepoAvailability.Ready) return null;
             try
             {
-                return ConflictLoader.ToOverview(await repo.Conflicts.GetOverviewAsync(_cts.Token));
+                return ConflictLoader.ToOverview(await repo.Conflicts.GetOverviewAsync(_cts.Token), repo.GetFullPath);
             }
             catch (GitCommandException ex)
             {

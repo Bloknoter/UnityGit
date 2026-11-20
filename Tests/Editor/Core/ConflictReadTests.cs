@@ -175,6 +175,29 @@ namespace UnityGit.Tests
             Assert.That(f.TheirsName, Does.Match("^[0-9a-f]{7}$"));
         }
 
+        // FlexGit decides "binary" by a NUL byte, so it reads a conflicted LFS pointer as text with one place.
+        [Test]
+        public async Task LoadFile_LfsPointerConflict_HasNoPlaces()
+        {
+            var repo = await _sb.InitRepoAsync("repo");
+            if (!repo.Lfs.IsInstalled) Assert.Ignore("git-lfs not installed");
+            await ConflictScenarios.LfsMergeAsync(repo, ConflictScenarios.Binary);
+            var s = _sb.CreateSession(repo.WorkingDirectory, new FakeEditorHooks());
+            await s.RefreshAsync();
+            Assert.That(File.ReadAllText(Path.Combine(repo.WorkingDirectory, "img.bin")),
+                Does.StartWith("version https://git-lfs.github.com/spec/v1\n<<<<<<<"), "setup: pointer text with markers");
+
+            var f = (await s.LoadConflictFileAsync("img.bin"))!;
+            var o = (await s.LoadConflictOverviewAsync())!;
+
+            Assert.That(f.Info.IsBinary, Is.True);
+            Assert.That(f.Info.PlaceCount, Is.EqualTo(0));
+            Assert.That(f.Places, Is.Empty);
+            Assert.That(f.Parts, Is.Empty);
+            var info = o.Files.Single(x => x.Path == "img.bin");
+            Assert.That((info.IsBinary, info.PlaceCount), Is.EqualTo((true, 0)));
+        }
+
         [Test]
         public async Task LoadFile_Scene_IsFlagged()
         {

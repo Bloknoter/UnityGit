@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using FlexGit;
@@ -59,6 +60,18 @@ namespace UnityGit.Tests
             if (merge.Succeeded) throw new InvalidOperationException("The merge did not conflict.");
             if (repo.GetState() != RepositoryState.Merging)
                 throw new InvalidOperationException("The merge did not stop in the merging state: " + merge.StandardError);
+        }
+
+        /// <summary>
+        /// Like <see cref="MergeAsync"/>, with git-lfs set up in <paramref name="repo"/> (<c>git lfs install --local</c>) and
+        /// tracking *.bin: the .bin files are committed as LFS pointers, so a conflict leaves pointer text with conflict
+        /// markers in the working tree. Check <c>repo.Lfs.IsInstalled</c> first.
+        /// </summary>
+        public static async Task LfsMergeAsync(GitRepository repo, params ConflictFile[] files)
+        {
+            Ok(await repo.RunRawAsync("lfs", "install", "--local"), "lfs install");
+            const string attributes = "*.bin filter=lfs diff=lfs merge=lfs -text\n";
+            await MergeAsync(repo, new[] { Text(".gitattributes", attributes, attributes, attributes) }.Concat(files).ToArray());
         }
 
         static void Apply(GitRepository repo, ConflictFile[] files, Func<ConflictFile, byte[]?> pick)
