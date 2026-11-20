@@ -9,7 +9,7 @@ using FlexGit;
 
 namespace UnityGit
 {
-    public sealed class GitSession : IDisposable
+    public sealed partial class GitSession : IDisposable
     {
         readonly GitOptions _options;
         readonly SynchronizationContext? _context;

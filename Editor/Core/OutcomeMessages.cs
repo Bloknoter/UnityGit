@@ -33,6 +33,8 @@ namespace UnityGit
         public static string GitsWords(GitError error)
             => string.IsNullOrWhiteSpace(error.StandardError) ? error.Message : error.StandardError.Trim();
 
+        public static string Places(int n) => n == 1 ? "1 place" : $"{n} places";
+
         public static string Files(int n) => n == 1 ? "1 file" : $"{n} files";
     }
 }

@@ -26,6 +26,9 @@ namespace UnityGit.UI
             return true;
         }
 
+        public bool Confirm(string title, string message, string ok)
+            => EditorUtility.DisplayDialog(title, message, ok, "Cancel");
+
         public void BeginGitOperation()
         {
             EditorApplication.LockReloadAssemblies();

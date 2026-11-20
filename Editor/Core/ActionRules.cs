@@ -28,6 +28,8 @@ namespace UnityGit
             }
         }
 
+        static bool IsMergeOrRebase(RepoOperation op) => op == RepoOperation.Merging || op == RepoOperation.Rebasing;
+
         // Checks run in order and the first match wins.
         static string? Why(GitAction action, RepoSnapshot s, bool isBusy, bool isPlayMode)
         {
@@ -49,6 +51,7 @@ namespace UnityGit
             {
                 case GitAction.Commit:
                     if (s.HasConflicts) return "Resolve conflicts first";
+                    if (s.Operation == RepoOperation.Rebasing) return "Continue or abort the rebase first";
                     if (s.Operation != RepoOperation.None && s.Operation != RepoOperation.Merging)
                         return $"Finish or abort the {OperationNoun(s.Operation)} outside UnityGit";
                     if (s.Changes.Count == 0) return "Nothing to commit";
@@ -75,6 +78,25 @@ namespace UnityGit
                 case GitAction.Switch:
                     if (isPlayMode) return NotInPlayMode;
                     if (s.Operation != RepoOperation.None) return $"Finish or abort the {OperationNoun(s.Operation)} first";
+                    return null;
+
+                case GitAction.Resolve:
+                case GitAction.RestoreConflict:
+                    if (isPlayMode) return NotInPlayMode;
+                    if (s.ConflictedPaths.Count == 0) return "No conflicts to resolve";
+                    return null;
+
+                case GitAction.Continue:
+                    if (isPlayMode) return NotInPlayMode;
+                    if (s.Operation == RepoOperation.None) return "Nothing to continue";
+                    if (!IsMergeOrRebase(s.Operation)) return $"Finish the {OperationNoun(s.Operation)} outside UnityGit";
+                    if (s.ConflictedPaths.Count > 0) return "Resolve all conflicts first";
+                    return null;
+
+                case GitAction.Abort:
+                    if (isPlayMode) return NotInPlayMode;
+                    if (s.Operation == RepoOperation.None) return "Nothing to abort";
+                    if (!IsMergeOrRebase(s.Operation)) return $"Abort the {OperationNoun(s.Operation)} outside UnityGit";
                     return null;
 
                 case GitAction.SetUpLfs:

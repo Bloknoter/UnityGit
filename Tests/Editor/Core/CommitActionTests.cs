@@ -264,7 +264,7 @@ namespace UnityGit.Tests
 
             var o = await s.CommitAsync("rebase", Rows(s), Rows(s));
 
-            Assert.That((o.Kind, o.Message), Is.EqualTo((OutcomeKind.Refused, "Finish or abort the rebase outside UnityGit")));
+            Assert.That((o.Kind, o.Message), Is.EqualTo((OutcomeKind.Refused, "Continue or abort the rebase first")));
             Assert.That(await Head(repo), Is.EqualTo(head));
         }
 
