@@ -322,6 +322,7 @@ namespace UnityGit.Tests
             var theirs = p.File!.TheirsName;
             Assert.That(ButtonTexts(p.Q(UiNames.ConflictWholeFile)), Is.EqualTo(new[] { "Use main", $"Use {theirs} (removes the file)" }));
             Assert.That(LabelNamed(p, UiNames.ConflictFileType).text, Is.EqualTo($"Changed by main, deleted by {theirs}"));
+            Assert.That(IsDisplayed(LabelNamed(p, UiNames.ConflictFileNote)), Is.False, "no \"No conflict places left\" note: nothing was resolved by hand");
         }
 
         [Test] public async Task SceneFile_ShowsTheWarning()

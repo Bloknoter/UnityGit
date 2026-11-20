@@ -573,7 +573,10 @@ namespace UnityGit.UI
         {
             if (info.HasMalformedMarkers)
                 return "The conflict markers in this file can't be read as places — use one side, or fix it in your editor and mark it resolved.";
-            if (!info.IsBinary && info.ExistsInWorkingTree && !info.HasPlaces)
+            // The markers were removed by hand. A file deleted on a side has no places to begin with; its type text and the
+            // two Use buttons say what to do.
+            var bothSides = info.Type == ConflictType.BothModified || info.Type == ConflictType.BothAdded;
+            if (!info.IsBinary && info.ExistsInWorkingTree && !info.HasPlaces && bothSides)
                 return "No conflict places left — mark it resolved if it looks right.";
             return null;
         }
