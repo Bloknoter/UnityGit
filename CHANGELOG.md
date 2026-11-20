@@ -6,6 +6,7 @@
 
 - Conflicts tab, shown while a file is conflicted or a merge or rebase is in progress.
 - Per-place and whole-file choices (Use A, Use B, A then B, B then A), previewed until Apply; Use A and Use B for binary and deleted files.
+- LFS-tracked files in conflict take a whole side (Use A or Use B), which restores the real file instead of LFS pointer text.
 - Mark resolved, Start over and Open in editor.
 - Finish merge and Abort merge; Continue rebase and Abort rebase. Abort asks first and, with Continue rebase, handles unsaved assets and modified scenes.
 - Warning for scenes and prefabs.
