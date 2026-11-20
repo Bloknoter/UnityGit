@@ -25,6 +25,10 @@ namespace UnityGit.UI
         static readonly WindowTab[] Tabs = (WindowTab[])Enum.GetValues(typeof(WindowTab));
 
         readonly GitSession _session;
+        // The selected tab is kept by name in SessionState, so the view a domain reload builds (a script change, entering
+        // Play Mode) opens on it. The key holds the project path, so sessions on other folders (the tests' sandboxes) keep
+        // their own.
+        readonly string _tabKey;
         readonly Dictionary<WindowTab, Func<GitSession, VisualElement>> _factories = new Dictionary<WindowTab, Func<GitSession, VisualElement>>();
         readonly Dictionary<WindowTab, VisualElement> _panels = new Dictionary<WindowTab, VisualElement>();
         readonly List<WindowTab> _visibleTabs = new List<WindowTab>(); // the nav's items
@@ -53,6 +57,10 @@ namespace UnityGit.UI
         public GitWindowView(GitSession session)
         {
             _session = session;
+            _tabKey = SelectedTabKey(session.ProjectPath);
+            var saved = SessionState.GetString(_tabKey, string.Empty);
+            foreach (var tab in Tabs)
+                if (tab.ToString() == saved) SelectedTab = tab; // a hidden Conflicts tab gives way to Changes on render
             AddToClassList("unitygit-window");
             EditorUiTheme.Apply(this);
             var layout = AssetDatabase.LoadAssetAtPath<StyleSheet>(LayoutSheetPath); // after the theme, so it wins ties
@@ -135,13 +143,22 @@ namespace UnityGit.UI
 
         public WindowTab SelectedTab { get; private set; }
 
+        /// <summary>The SessionState key that keeps the selected tab of the project at <paramref name="projectPath"/>.</summary>
+        internal static string SelectedTabKey(string projectPath) => "UnityGit.SelectedTab." + projectPath;
+
         /// <summary>The tabs in the nav: all of them, with Conflicts only while it has something to show.</summary>
         internal IReadOnlyList<WindowTab> VisibleTabs => _visibleTabs;
 
         public void SelectTab(WindowTab tab)
         {
-            SelectedTab = tab;
+            SetSelectedTab(tab);
             Render();
+        }
+
+        void SetSelectedTab(WindowTab tab)
+        {
+            SelectedTab = tab;
+            SessionState.SetString(_tabKey, tab.ToString());
         }
 
         /// <summary>Updates every element from the session's current state.</summary>
@@ -155,7 +172,8 @@ namespace UnityGit.UI
         }
 
         // Spec §5.1: Conflicts shows while a file is conflicted or a merge or rebase is in progress. When it goes away while
-        // selected, Changes is selected instead.
+        // selected, Changes is selected instead: only once the repo has been read, because a session still loading (the one
+        // a domain reload starts) knows of no conflicts yet.
         void UpdateVisibleTabs(RepoSnapshot s)
         {
             var conflicts = s.ConflictedPaths.Count > 0 || s.Operation == RepoOperation.Merging || s.Operation == RepoOperation.Rebasing;
@@ -165,7 +183,7 @@ namespace UnityGit.UI
                 foreach (var tab in Tabs)
                     if (tab != WindowTab.Conflicts || conflicts) _visibleTabs.Add(tab);
             }
-            if (!conflicts && SelectedTab == WindowTab.Conflicts) SelectedTab = WindowTab.Changes;
+            if (!conflicts && SelectedTab == WindowTab.Conflicts && s.Availability == RepoAvailability.Ready) SetSelectedTab(WindowTab.Changes);
         }
 
         /// <summary>

@@ -1,9 +1,11 @@
 #nullable enable
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using FlexGit;
 using NUnit.Framework;
+using UnityEditor;
 using UnityEditor.UIElements;
 using UnityEngine.UIElements;
 using UnityGit.UI;
@@ -14,11 +16,14 @@ namespace UnityGit.Tests
     public class WindowViewTests
     {
         GitSandbox _sb = null!;
+        readonly List<string> _tabProjects = new List<string>(); // projects whose selected tab a test stored
 
         [SetUp] public async Task SetUp() => _sb = await GitSandbox.CreateAsync();
 
         [TearDown] public void TearDown()
         {
+            foreach (var project in _tabProjects) SessionState.EraseString(GitWindowView.SelectedTabKey(project));
+            _tabProjects.Clear();
             SessionProvider.ClearOverride();
             _sb.Dispose();
             GitLocator.ClearCache();
@@ -114,6 +119,53 @@ namespace UnityGit.Tests
             Assert.That(v.Q<ToolbarMenu>(UiNames.BranchMenu).text, Is.EqualTo("main"));
             Assert.That(v.Q<Button>(UiNames.PushButton).text, Is.EqualTo("Push ↑1"));
             Assert.That(v.Q<Button>(UiNames.PullButton).text, Is.EqualTo("Pull"));
+        }
+
+        // A script reload builds a new view (GitWindow.CreateGUI): it opens on the tab the last one showed.
+        [Test] public async Task SelectedTab_RestoredByTheNextView()
+        {
+            var (s, _) = await TrioWithUnpushedCommitAsync();
+            _tabProjects.Add(s.ProjectPath);
+            var v = new GitWindowView(s);
+
+            v.SelectTab(WindowTab.Branches);
+
+            Assert.That(SessionState.GetString(GitWindowView.SelectedTabKey(s.ProjectPath), string.Empty), Is.EqualTo("Branches"));
+            Assert.That(new GitWindowView(s).SelectedTab, Is.EqualTo(WindowTab.Branches));
+        }
+
+        // Applying the last conflicted script recompiles: the new session starts loading, and Conflicts must survive that.
+        [Test] public async Task SelectedTab_ConflictsKeptWhileTheNewSessionLoads()
+        {
+            var repo = await _sb.InitRepoAsync("repo");
+            await ConflictScenarios.MergeAsync(repo, ConflictScenarios.TwoPlaces);
+            var s = _sb.CreateSession(repo.WorkingDirectory, new FakeEditorHooks());
+            _tabProjects.Add(s.ProjectPath);
+            await s.RefreshAsync();
+            var v = new GitWindowView(s);
+            v.SelectTab(WindowTab.Conflicts);
+            await v.Q<ConflictsPanel>()!.ReloadAsync();
+
+            var reloaded = _sb.CreateSession(repo.WorkingDirectory, new FakeEditorHooks());
+            var view = new GitWindowView(reloaded);
+            Assert.That(view.SelectedTab, Is.EqualTo(WindowTab.Conflicts), "while the new session loads");
+            await reloaded.RefreshAsync();
+            view.Render();
+
+            Assert.That(view.SelectedTab, Is.EqualTo(WindowTab.Conflicts));
+            await view.Q<ConflictsPanel>()!.ReloadAsync(); // the reload the new panel started
+        }
+
+        // A stored Conflicts tab with nothing left to resolve falls back to Changes, as when the tab goes away.
+        [Test] public async Task SelectedTab_StoredConflictsWithoutConflicts_SelectsChanges()
+        {
+            var (s, _) = await TrioWithUnpushedCommitAsync();
+            _tabProjects.Add(s.ProjectPath);
+            SessionState.SetString(GitWindowView.SelectedTabKey(s.ProjectPath), "Conflicts");
+
+            var v = new GitWindowView(s);
+
+            Assert.That(v.SelectedTab, Is.EqualTo(WindowTab.Changes));
         }
 
         [Test] public async Task ButtonsDisabledWhileBusy()

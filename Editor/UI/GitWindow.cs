@@ -32,7 +32,7 @@ namespace UnityGit.UI
         void CreateGUI()
         {
             titleContent = new GUIContent("UnityGit");
-            _view = new GitWindowView(SessionProvider.Current);
+            _view = new GitWindowView(SessionProvider.Current); // on the tab shown before a domain reload, if any
             if (_pendingTab is WindowTab tab) _view.SelectTab(tab);
             _pendingTab = null;
             rootVisualElement.Add(_view);
