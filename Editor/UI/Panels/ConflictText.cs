@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.Text;
 
 namespace UnityGit.UI
 {
@@ -25,13 +26,20 @@ namespace UnityGit.UI
 
     /// <summary>
     /// What the conflict preview shows of a file (spec §5.5): a few unchanged lines around each place, at most
-    /// <see cref="MaxSideLines"/> lines of a side, and no CR characters. Large files never reach a label whole, so the
-    /// editor doesn't freeze laying them out.
+    /// <see cref="MaxSideLines"/> lines and <see cref="MaxBlockChars"/> characters of a side, no line longer than
+    /// <see cref="MaxLineChars"/>, and no CR characters. Large files (a text-serialized mesh has single lines of hundreds
+    /// of KB) never reach a label whole, so the editor doesn't freeze laying them out.
     /// </summary>
     internal static class ConflictText
     {
         public const int ContextLines = 3;
         public const int MaxSideLines = 200;
+
+        /// <summary>A longer line shows its first this many characters and "…".</summary>
+        public const int MaxLineChars = 1000;
+
+        /// <summary>The most characters <see cref="Cap"/> shows of one block; the lines after it are counted instead.</summary>
+        public const int MaxBlockChars = 20000;
 
         // A run is collapsed only when it hides at least this many lines: "⋯ 1 unchanged line" takes a line itself.
         const int MinCollapsed = 2;
@@ -44,25 +52,35 @@ namespace UnityGit.UI
         }
 
         /// <summary>
-        /// The first <paramref name="maxLines"/> lines of <paramref name="text"/> (a <see cref="ForDisplay"/> result), and
+        /// The first <paramref name="maxLines"/> lines of <paramref name="text"/> (a <see cref="ForDisplay"/> result), each
+        /// cut to <see cref="MaxLineChars"/>, as many as fit in <see cref="MaxBlockChars"/> (the first always does), and
         /// how many lines are left out. One trailing line break doesn't start another line.
         /// </summary>
         public static (string Shown, int Hidden) Cap(string text, int maxLines = MaxSideLines)
         {
             if (maxLines < 1) throw new ArgumentOutOfRangeException(nameof(maxLines));
-            var end = -1;
-            for (var i = 0; i < maxLines; i++)
+            var shown = new StringBuilder();
+            var lines = 0;
+            var cut = false;
+            var start = 0;
+            while (start < text.Length && lines < maxLines)
             {
-                end = text.IndexOf('\n', end + 1);
-                if (end < 0) return (text, 0);
+                var end = text.IndexOf('\n', start);
+                var length = (end < 0 ? text.Length : end) - start;
+                if (lines > 0 && shown.Length + 1 + ShownLength(length) > MaxBlockChars) break;
+                if (lines > 0) shown.Append('\n');
+                cut |= AppendLine(shown, text, start, length);
+                lines++;
+                start = end < 0 ? text.Length : end + 1;
             }
-            var hidden = CountLines(text, end + 1);
-            return hidden == 0 ? (text, 0) : (text.Substring(0, end), hidden);
+            var hidden = CountLines(text, start);
+            return hidden == 0 && !cut ? (text, 0) : (shown.ToString(), hidden);
         }
 
         /// <summary>
         /// The pieces to show of an unchanged run between places: its first <see cref="ContextLines"/> lines when a place
-        /// comes before it, its last ones when a place comes after it, and the lines between collapsed into a count.
+        /// comes before it, its last ones when a place comes after it, and the lines between collapsed into a count. Lines
+        /// longer than <see cref="MaxLineChars"/> are cut.
         /// </summary>
         public static IReadOnlyList<ContextPiece> Context(string text, bool placeBefore, bool placeAfter)
         {
@@ -73,12 +91,12 @@ namespace UnityGit.UI
             var head = placeBefore ? ContextLines : 0;
             var tail = placeAfter ? ContextLines : 0;
             var hidden = count - head - tail;
-            if (hidden < MinCollapsed) return new[] { ContextPiece.Lines(text) };
+            if (hidden < MinCollapsed) return new[] { ContextPiece.Lines(CutLongLines(text)) };
 
             var pieces = new List<ContextPiece>(3);
-            if (head > 0) pieces.Add(ContextPiece.Lines(text.Substring(0, starts[head])));
+            if (head > 0) pieces.Add(ContextPiece.Lines(CutLongLines(text.Substring(0, starts[head]))));
             pieces.Add(ContextPiece.Run(hidden));
-            if (tail > 0) pieces.Add(ContextPiece.Lines(text.Substring(starts[count - tail])));
+            if (tail > 0) pieces.Add(ContextPiece.Lines(CutLongLines(text.Substring(starts[count - tail]))));
             return pieces;
         }
 
@@ -89,6 +107,39 @@ namespace UnityGit.UI
         /// <summary>"⋯ 51 more lines — open the file to see all": what <see cref="Cap"/> left out of a side.</summary>
         public static string MoreLines(int lines)
             => $"⋯ {PanelParts.Count(lines)} more {(lines == 1 ? "line" : "lines")} — open the file to see all";
+
+        // The text with each line longer than MaxLineChars cut, line breaks kept. The same string when nothing is cut.
+        static string CutLongLines(string text)
+        {
+            if (text.Length <= MaxLineChars) return text;
+            var shown = new StringBuilder();
+            var cut = false;
+            for (var start = 0; start < text.Length;)
+            {
+                var end = text.IndexOf('\n', start);
+                cut |= AppendLine(shown, text, start, (end < 0 ? text.Length : end) - start);
+                if (end < 0) break;
+                shown.Append('\n');
+                start = end + 1;
+            }
+            return cut ? shown.ToString() : text;
+        }
+
+        // Appends one line (without its line break), cut to MaxLineChars characters and "…" when longer. True when cut.
+        static bool AppendLine(StringBuilder shown, string text, int start, int length)
+        {
+            if (length <= MaxLineChars)
+            {
+                shown.Append(text, start, length);
+                return false;
+            }
+            var keep = char.IsHighSurrogate(text[start + MaxLineChars - 1]) ? MaxLineChars - 1 : MaxLineChars; // a whole character
+            shown.Append(text, start, keep).Append('…');
+            return true;
+        }
+
+        // How long AppendLine makes a line of this length.
+        static int ShownLength(int length) => length <= MaxLineChars ? length : MaxLineChars + 1;
 
         // The lines from start on, counted as Cap counts them.
         static int CountLines(string text, int start)

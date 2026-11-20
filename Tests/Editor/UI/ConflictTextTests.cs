@@ -32,6 +32,40 @@ namespace UnityGit.Tests
             Assert.That(ConflictText.Cap("a\nb\nc"), Is.EqualTo(("a\nb\nc", 0)));
         }
 
+        // Text-serialized meshes and terrains have single lines of hundreds of KB: each reaches a label cut short.
+        [Test] public void Cap_TruncatesVeryLongLines()
+        {
+            var (shown, hidden) = ConflictText.Cap(new string('x', 5000));
+
+            Assert.That(shown, Is.EqualTo(new string('x', 1000) + "…"));
+            Assert.That(hidden, Is.EqualTo(0));
+            Assert.That(ConflictText.Cap("a\n" + new string('x', 1001) + "\nb"), Is.EqualTo(("a\n" + new string('x', 1000) + "…\nb", 0)));
+        }
+
+        [Test] public void Cap_StopsAtBlockBudget()
+        {
+            var text = string.Join("\n", Enumerable.Repeat(new string('x', 900), 100));
+
+            var (shown, hidden) = ConflictText.Cap(text);
+
+            var lines = shown.Split('\n');
+            Assert.That(lines.Length, Is.LessThan(ConflictText.MaxSideLines));
+            Assert.That(hidden, Is.GreaterThan(0));
+            Assert.That(lines.Length + hidden, Is.EqualTo(100));
+            Assert.That(shown.Length, Is.LessThanOrEqualTo(ConflictText.MaxBlockChars));
+            Assert.That(lines, Is.All.EqualTo(new string('x', 900)));
+        }
+
+        [Test] public void Context_TruncatesVeryLongLines()
+        {
+            var longLine = new string('x', 5000) + "\n";
+
+            Assert.That(Pieces(longLine + "short\n", true, false),
+                Is.EqualTo(new (string?, int)[] { (new string('x', 1000) + "…\nshort\n", 0) }));
+            Assert.That(Pieces(Lines(1, 10) + longLine, false, true),
+                Is.EqualTo(new (string?, int)[] { (null, 8), (Lines(9, 10) + new string('x', 1000) + "…\n", 0) }));
+        }
+
         [Test] public void Context_Between_CollapsesLongRuns()
         {
             Assert.That(Pieces(Lines(1, 10), true, true), Is.EqualTo(new (string?, int)[] { (Lines(1, 3), 0), (null, 4), (Lines(8, 10), 0) }));

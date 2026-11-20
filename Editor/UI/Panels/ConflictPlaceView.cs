@@ -115,7 +115,8 @@ namespace UnityGit.UI
             return block;
         }
 
-        // A side's or a pick's text, at most ConflictText.MaxSideLines lines, then how many more the file has.
+        // A side's or a pick's text, capped by ConflictText.Cap (lines, characters per line and per block), then how many
+        // more lines the file has.
         static void AddCapped(VisualElement parent, string text, string textClass)
         {
             var (shown, hidden) = ConflictText.Cap(ConflictText.ForDisplay(text));

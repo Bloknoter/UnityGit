@@ -386,6 +386,18 @@ namespace UnityGit.Tests
             Assert.That(place.Query<Label>().ToList().Select(l => l.text), Has.Member("⋯ 51 more lines — open the file to see all"));
         }
 
+        // A text-serialized mesh can hold a single line of hundreds of KB: no label gets it whole.
+        [Test] public async Task Preview_CapsVeryLongLine()
+        {
+            await MergeAsync(ConflictScenarios.Text("long.txt", "x\n", new string('a', 200000) + "\n", "y\n"));
+
+            var p = await PanelAsync();
+
+            var texts = Place(p, 0).Query<Label>().ToList().Select(l => l.text ?? string.Empty).ToList();
+            Assert.That(texts, Has.Member(new string('a', 1000) + "…"));
+            Assert.That(p.Query<Label>().ToList().Max(l => (l.text ?? string.Empty).Length), Is.LessThanOrEqualTo(21000));
+        }
+
         [Test] public async Task Outcome_ResolveButton_OpensConflicts()
         {
             await PullConflictAsync(rebase: false);
