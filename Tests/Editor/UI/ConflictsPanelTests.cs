@@ -115,6 +115,29 @@ namespace UnityGit.Tests
             Assert.That(v.VisibleTabs, Has.No.Member(WindowTab.Conflicts));
         }
 
+        // Conflicts joins the nav ahead of Branches: the selection stays on the Branches row.
+        [Test] public async Task Nav_ConflictsAppear_KeepsSelectedTab()
+        {
+            _repo = await _sb.InitRepoAsync("repo");
+            _s = _sb.CreateSession(_repo.WorkingDirectory, _hooks);
+            await _s.RefreshAsync();
+            var v = new GitWindowView(_s);
+            using (var window = UnityGitTestWindow.Open(v)) // a live nav: its rows are made and refreshed as in the window
+            {
+                v.SelectTab(WindowTab.Branches);
+                window.ResolveStylesAndLayout();
+
+                await ConflictScenarios.MergeAsync(_repo, ConflictScenarios.TwoPlaces);
+                await _s.RefreshAsync();
+                v.Render();
+                window.ResolveStylesAndLayout();
+
+                Assert.That(v.SelectedTab, Is.EqualTo(WindowTab.Branches));
+                Assert.That(v.VisibleTabs, Has.Member(WindowTab.Conflicts), "setup");
+                Assert.That(v.Q<ListView>(UiNames.Nav).selectedIndex, Is.EqualTo(v.VisibleTabs.ToList().IndexOf(WindowTab.Branches)));
+            }
+        }
+
         [Test] public async Task Header_Merge()
         {
             await MergeAsync(ConflictScenarios.TwoPlaces);
@@ -278,6 +301,19 @@ namespace UnityGit.Tests
 
             await p.ReloadAsync();
 
+            Assert.That(p.PickOf(0), Is.EqualTo(ConflictPick.Theirs));
+        }
+
+        [Test] public async Task Picks_SurviveRefusal()
+        {
+            await MergeAsync(ConflictScenarios.TwoPlaces);
+            var p = await PanelAsync();
+            p.Pick(ConflictPick.Theirs);
+            _s.IsPlayMode = true;
+
+            var o = await p.ApplyAsync();
+
+            Assert.That(o.Kind, Is.EqualTo(OutcomeKind.Refused), o.Message);
             Assert.That(p.PickOf(0), Is.EqualTo(ConflictPick.Theirs));
         }
 

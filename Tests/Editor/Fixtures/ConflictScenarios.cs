@@ -39,6 +39,11 @@ namespace UnityGit.Tests
             Path = "gone.txt", Base = Utf8("keep\n"), Ours = Utf8("keep changed\n"), Theirs = null,
         };
 
+        public static readonly ConflictFile DeletedByUs = new ConflictFile
+        {
+            Path = "dropped.txt", Base = Utf8("keep\n"), Ours = null, Theirs = Utf8("keep changed\n"),
+        };
+
         public static readonly ConflictFile Scene = Text("Assets/Level.unity", "a: 1\n", "a: 2\n", "a: 3\n");
         public static readonly ConflictFile SceneMeta = Text("Assets/Level.unity.meta", "guid: 1\n", "guid: 2\n", "guid: 3\n");
 

@@ -135,6 +135,30 @@ namespace UnityGit.Tests
             Assert.That(_hooks.Calls, Does.Contain("RefreshAssets"));
         }
 
+        [Test] public async Task UseSide_Binary_TakesOurs()
+        {
+            await MergeAsync(ConflictScenarios.Binary);
+
+            var o = await _s.UseSideAsync(await Load("img.bin"), true);
+
+            Assert.That((o.Kind, o.Message), Is.EqualTo((OutcomeKind.Succeeded, "Used main for img.bin")));
+            Assert.That(ReadBytes("img.bin"), Is.EqualTo("B\0main"));
+            Assert.That(_s.Snapshot.ConflictedPaths, Is.Empty);
+        }
+
+        [Test] public async Task UseSide_DeletedByUs_OursRemovesFile()
+        {
+            await MergeAsync(ConflictScenarios.DeletedByUs);
+            var f = await Load("dropped.txt");
+            Assert.That(f.Info.Type, Is.EqualTo(ConflictType.DeletedByUs), "setup");
+
+            var o = await _s.UseSideAsync(f, true);
+
+            Assert.That(o.Kind, Is.EqualTo(OutcomeKind.Succeeded), o.Message);
+            Assert.That(File.Exists(FilePath("dropped.txt")), Is.False);
+            Assert.That(_s.Snapshot.ConflictedPaths, Is.Empty);
+        }
+
         // Taking a whole side would drop the hand merge and the changes git merged cleanly from the other side (spec §3).
         [Test] public async Task UseSide_HandResolvedText_Refused()
         {
