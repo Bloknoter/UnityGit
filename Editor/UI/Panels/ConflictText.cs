@@ -135,6 +135,10 @@ namespace UnityGit.UI
             return pieces;
         }
 
+        /// <summary>One line as a row shows it: CR dropped, cut to <see cref="MaxLineChars"/> characters and "…" when longer.</summary>
+        public static string CutLine(string line)
+            => line.Length <= MaxLineChars && line.IndexOf('\r') < 0 ? line : ShownLine(new StringBuilder(), line, 0, line.Length);
+
         /// <summary>"⋯ 4 unchanged lines": a collapsed run of unchanged text.</summary>
         public static string Unchanged(int lines)
             => lines == 1 ? "⋯ 1 unchanged line" : $"⋯ {PanelParts.Count(lines)} unchanged lines";

@@ -12,7 +12,7 @@ namespace UnityGit.UI
     /// <summary>
     /// The change list, under a header with a tick-all checkbox and a "{ticked} of {rows} to commit" summary, and the
     /// commit card. Ticks decide what is committed. The list's selection (click, Ctrl+click, Shift+click) only decides
-    /// which rows a checkbox click or Space applies to.
+    /// which rows a checkbox click or Space applies to, and which file the preview under the list shows.
     /// </summary>
     internal sealed class ChangesPanel : VisualElement, IRenderablePanel
     {
@@ -35,6 +35,11 @@ namespace UnityGit.UI
         List<string> _rows = new List<string>();
         bool _merging;
         bool _syncingSelection; // set while the panel moves the list's selection itself, so that isn't read back
+
+        readonly ChangePreviewView _preview;
+        string? _previewPath;           // the file shown or being read; null while a note is shown
+        RepoSnapshot? _previewSnapshot; // the snapshot that file was read for: a new one reads it again
+        int _previewRequest;            // numbers the reads, so a result for an earlier selection is dropped
 
         public ChangesPanel(GitSession session)
         {
@@ -71,7 +76,18 @@ namespace UnityGit.UI
             _list.RegisterCallback<KeyDownEvent>(OnListKeyDown);
             var listCard = PanelParts.ListCard(null, _list);
             listCard.Insert(0, header);
-            Add(listCard);
+
+            // The list on top, the preview of the selected file below, a divider between them to drag (spec §5.1).
+            _preview = new ChangePreviewView();
+            var split = new TwoPaneSplitView(1, PreviewHeight, TwoPaneSplitViewOrientation.Vertical)
+            {
+                name = UiNames.ChangesSplit,
+                viewDataKey = UiNames.ChangesSplit,
+            };
+            split.AddToClassList("unitygit-changes-split");
+            split.Add(listCard);
+            split.Add(_preview);
+            Add(split);
 
             var commitCard = EditorUiElements.Card();
             commitCard.AddToClassList("unitygit-commit-card");
@@ -95,6 +111,15 @@ namespace UnityGit.UI
             Add(commitCard);
             Render();
         }
+
+        /// <summary>The preview pane's starting height.</summary>
+        internal const float PreviewHeight = 220f;
+
+        /// <summary>The preview of the selected file.</summary>
+        internal ChangePreviewView Preview => _preview;
+
+        /// <summary>The latest preview read, for tests to wait on. Completed when nothing is being read.</summary>
+        internal Task PreviewLoad { get; private set; } = Task.CompletedTask;
 
         /// <summary>Paths of the rows currently listed.</summary>
         internal IReadOnlyList<string> Rows => _rows;
@@ -156,6 +181,7 @@ namespace UnityGit.UI
             foreach (var path in rowPaths)
                 if (_byPath.ContainsKey(path)) _selected.Add(path);
             ShowSelection();
+            UpdatePreview();
         }
 
         internal async Task<ActionOutcome> SubmitCommitAsync()
@@ -186,6 +212,7 @@ namespace UnityGit.UI
             RefreshRows();
             UpdateSubmit();
             UpdateHeader();
+            UpdatePreview();
         }
 
         /// <summary>The badge tone for a change kind: additions green, edits blue, removals and conflicts red, moves accent.</summary>
@@ -274,6 +301,52 @@ namespace UnityGit.UI
             _selected.Clear();
             foreach (var i in _list.selectedIndices)
                 if (i >= 0 && i < _rows.Count) _selected.Add(_rows[i]);
+            UpdatePreview();
+        }
+
+        // One selected row is read and shown; none, several or a conflicted one get a note. The file is read again when the
+        // selection moves to another file or the snapshot is new (the file may have changed); while the same file is read
+        // again its old preview stays, so a refresh doesn't flicker.
+        void UpdatePreview()
+        {
+            var selected = SelectedRows;
+            string? note = null;
+            if (selected.Count == 0) note = PreviewText.SelectFile;
+            else if (selected.Count > 1) note = PreviewText.Selected(selected.Count);
+            else if (_byPath[selected[0]].IsConflicted) note = PreviewText.Conflicted;
+            if (note != null)
+            {
+                _previewRequest++;
+                _previewPath = null;
+                _previewSnapshot = null;
+                _preview.ShowNote(note);
+                PreviewLoad = Task.CompletedTask;
+                return;
+            }
+
+            var row = _byPath[selected[0]];
+            var snapshot = _session.Snapshot;
+            if (row.Path == _previewPath && ReferenceEquals(snapshot, _previewSnapshot)) return;
+            if (row.Path != _previewPath) _preview.ShowLoading(row.Path);
+            _previewPath = row.Path;
+            _previewSnapshot = snapshot;
+            PreviewLoad = LoadPreviewAsync(row, ++_previewRequest);
+        }
+
+        async Task LoadPreviewAsync(ChangeItem row, int request)
+        {
+            try
+            {
+                var preview = await _session.LoadChangePreviewAsync(row);
+                if (request != _previewRequest) return; // the selection or the snapshot moved on
+                if (preview == null) _preview.ShowNote(PreviewText.Failed);
+                else _preview.Show(preview);
+            }
+            catch (Exception ex)
+            {
+                Debug.LogException(ex);
+                if (request == _previewRequest) _preview.ShowNote(PreviewText.Failed);
+            }
         }
 
         void OnListKeyDown(KeyDownEvent e)

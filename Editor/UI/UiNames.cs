@@ -33,6 +33,16 @@ namespace UnityGit.UI
         public const string ChangesSummary = "unitygit-changes-summary";
         public const string CommitMessage = "unitygit-commit-message";
         public const string CommitSubmit = "unitygit-commit-submit";
+        public const string ChangesSplit = "unitygit-changes-split";
+        public const string ChangesPreview = "unitygit-changes-preview";
+        public const string PreviewTitle = "unitygit-preview-title";
+        public const string PreviewSummary = "unitygit-preview-summary";
+        public const string PreviewNote = "unitygit-preview-note";
+        public const string PreviewBody = "unitygit-preview-body";
+        public const string PreviewFile = "unitygit-preview-file";
+        public const string PreviewMeta = "unitygit-preview-meta";
+        public const string PreviewImage = "unitygit-preview-image";
+        public const string PreviewAudio = "unitygit-preview-audio";
         public const string ConflictsTitle = "unitygit-conflicts-title";
         public const string ConflictsSummary = "unitygit-conflicts-summary";
         public const string ConflictsNote = "unitygit-conflicts-note";
