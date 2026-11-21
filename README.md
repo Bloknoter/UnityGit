@@ -12,7 +12,7 @@ UnityGit lets you work with your Unity project's git repository without leaving 
 Add both lines to your project's `Packages/manifest.json`. FlexGit must come first:
 
 ```json
-"com.bloknoter.flexgit": "https://github.com/Bloknoter/FlexGit.git#upm/v2.1.0",
+"com.bloknoter.flexgit": "https://github.com/Bloknoter/FlexGit.git#upm/v2.2.0",
 "com.bloknoter.unitygit": "https://github.com/Bloknoter/UnityGit.git#v1.1.0"
 ```
 

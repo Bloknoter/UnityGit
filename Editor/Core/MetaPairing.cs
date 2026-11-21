@@ -16,7 +16,7 @@ namespace UnityGit
 
     internal static class MetaPairing
     {
-        const string MetaSuffix = ".meta";
+        public const string MetaSuffix = ".meta";
 
         // Folds each "X.meta" change into the row of "X"; unpaired changes stay rows of their own.
         public static IReadOnlyList<ChangeItem> Group(IReadOnlyList<FileChange> changes)
