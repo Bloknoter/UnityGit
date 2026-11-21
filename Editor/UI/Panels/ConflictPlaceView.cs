@@ -24,6 +24,7 @@ namespace UnityGit.UI
         // Built when first needed, so a file with many places doesn't lay out every side up front.
         VisualElement? _detail;
         VisualElement? _ours;
+        VisualElement? _base;
         VisualElement? _theirs;
         VisualElement? _buttons;
         Button? _clear;
@@ -61,6 +62,7 @@ namespace UnityGit.UI
                 // Use A uses A, Use B uses B, either order both; the base never. No pick: the sides look as made.
                 MarkSide(_ours!, pick == null ? (bool?)null : pick != ConflictPick.Theirs);
                 MarkSide(_theirs!, pick == null ? (bool?)null : pick != ConflictPick.Ours);
+                if (_base != null) MarkSide(_base, pick == null ? (bool?)null : false);
                 if (pick == null) _clear!.RemoveFromHierarchy();
                 else if (_clear!.parent == null) _buttons!.Add(_clear);
             }
@@ -87,7 +89,7 @@ namespace UnityGit.UI
             detail.AddToClassList("unitygit-conflict-place-detail");
             var starts = ConflictText.SideStarts(_place);
             detail.Add(_ours = Side(_place.OursName, _place.Ours, starts.Ours, "ours"));
-            if (_place.Base != null) detail.Add(Side("base", _place.Base, starts.Base, "base"));
+            if (_place.Base != null) detail.Add(_base = Side("base", _place.Base, starts.Base, "base"));
             detail.Add(_theirs = Side(_place.TheirsName, _place.Theirs, starts.Theirs, "theirs"));
 
             _buttons = new VisualElement { name = UiNames.ConflictPlaceButtons };

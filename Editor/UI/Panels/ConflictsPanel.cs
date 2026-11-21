@@ -631,9 +631,10 @@ namespace UnityGit.UI
                 number.style.width = _gutter;
                 if (inPlace)
                 {
-                    number.style.position = Position.Absolute;
-                    number.style.left = -(_gutter + PlaceInset);
-                    number.style.top = 0;
+                    // Pulled left out of the box by its margins, which take back exactly its width: the text still starts at
+                    // the row's left edge. It stays in the flow (not absolute), so a blank line's row is still a line tall.
+                    number.style.marginLeft = -(_gutter + PlaceInset);
+                    number.style.marginRight = PlaceInset;
                 }
                 element.Add(number);
                 element.Add(FileText(row.Text, textClass));

@@ -503,6 +503,23 @@ namespace UnityGit.Tests
             Assert.That((Mark("ours"), Mark("theirs")), Is.EqualTo(("used", "used")));
         }
 
+        // The base is never used, so a pick fades it with the side it leaves out.
+        [Test] public async Task PickedOption_FadesTheBase()
+        {
+            await Diff3MergeAsync(ConflictScenarios.TwoPlaces);
+            var p = await PanelAsync();
+            (bool Used, bool Unused) Base()
+            {
+                var block = Place(p, 0).Q(className: "unitygit-conflict-side--base");
+                return (block.ClassListContains("unitygit-conflict-side--used"), block.ClassListContains("unitygit-conflict-side--unused"));
+            }
+            Assert.That(Base(), Is.EqualTo((false, false)));
+
+            p.Pick(ConflictPick.OursThenTheirs);
+            p.SelectPlace(0);
+            Assert.That(Base(), Is.EqualTo((false, true)));
+        }
+
         [Test] public async Task WholeFileButton_PickedWhenEveryPlaceHasThatPick()
         {
             await MergeAsync(ConflictScenarios.TwoPlaces);
@@ -542,6 +559,20 @@ namespace UnityGit.Tests
             p.Pick(ConflictPick.TheirsThenOurs);
             Assert.That(Numbers(Place(p, 0)), Is.EqualTo(new[] { "5", "3" }));
             Assert.That(Place(p, 0).Query<Label>(className: "unitygit-conflict-preview").ToList().Select(l => l.text), Is.EqualTo(new[] { "TWO feature", "TWO main" }));
+        }
+
+        // A blank line in a side keeps its row a line tall: the number stays in the row's flow, beside an empty text (an
+        // absolutely placed number would leave the row 0px tall). Batch mode runs no layout, so the flow is what is checked.
+        [Test] public async Task LineNumbers_BlankLineKeepsItsRow()
+        {
+            await MergeAsync(ConflictScenarios.Text("b.txt", "x\n", "a\n\nb\n", "y\n"));
+            var p = await PanelAsync();
+
+            var rows = Place(p, 0).Q(className: "unitygit-conflict-side--ours").Query(className: "unitygit-conflict-row").ToList();
+            var numbers = rows.Select(r => r.Q<Label>(className: "unitygit-conflict-line-number")).ToList();
+            Assert.That(rows.Select(r => r.Q<Label>(className: "unitygit-conflict-text").text), Is.EqualTo(new[] { "a", "", "b" }));
+            Assert.That(numbers.Select(n => n.text), Is.EqualTo(new[] { "2", "3", "4" }));
+            Assert.That(numbers.Select(n => n.style.position.value), Is.All.EqualTo(Position.Relative));
         }
 
         [Test] public async Task LineNumbers_Diff3_NumbersTheBase()
