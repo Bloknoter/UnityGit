@@ -342,6 +342,7 @@ namespace UnityGit.Tests
 
             p.PickSide(false);
 
+            Assert.That(ButtonTexts(p.Q(UiNames.ConflictWholeFile)), Is.EqualTo(new[] { "Use main", $"✓ Use {p.File!.TheirsName}" }));
             Assert.That(p.SidePick, Is.False);
             var o = await p.ApplyAsync();
             Assert.That(o.Succeeded, Is.True, o.Message);
@@ -458,6 +459,61 @@ namespace UnityGit.Tests
             Assert.That(LabelNamed(p, UiNames.ConflictFileType).enableRichText, Is.False);
             var chip = Place(p, 0).Q<Label>(className: EditorUiClasses.Chip);
             Assert.That((chip.text, chip.enableRichText), Is.EqualTo(("Use main", false)));
+        }
+
+        [Test] public async Task PickedOption_IsFilledAndTicked()
+        {
+            await MergeAsync(ConflictScenarios.TwoPlaces);
+            var p = await PanelAsync();
+            p.Pick(ConflictPick.Theirs);
+            p.SelectPlace(0);
+
+            var buttons = Place(p, 0).Q(UiNames.ConflictPlaceButtons).Query<Button>().ToList();
+            Assert.That(buttons.Select(b => b.text), Is.EqualTo(new[] { "Use main", "✓ Use feature", "Use main then feature", "Use feature then main", "Clear" }));
+            Assert.That(buttons.Select(b => b.ClassListContains(ConflictsPanel.PickedClass)), Is.EqualTo(new[] { false, true, false, false, false }));
+        }
+
+        [Test] public async Task PickedOption_MarksTheSidesItUses()
+        {
+            await MergeAsync(ConflictScenarios.TwoPlaces);
+            var p = await PanelAsync();
+            string Mark(string side)
+            {
+                var block = Place(p, 0).Q(className: "unitygit-conflict-side--" + side);
+                return block.ClassListContains("unitygit-conflict-side--used") ? "used" : block.ClassListContains("unitygit-conflict-side--unused") ? "unused" : "-";
+            }
+            Assert.That((Mark("ours"), Mark("theirs")), Is.EqualTo(("-", "-")));
+
+            p.Pick(ConflictPick.Theirs);
+            p.SelectPlace(0);
+            Assert.That((Mark("ours"), Mark("theirs")), Is.EqualTo(("unused", "used")));
+
+            p.Pick(ConflictPick.OursThenTheirs);
+            p.SelectPlace(0);
+            Assert.That((Mark("ours"), Mark("theirs")), Is.EqualTo(("used", "used")));
+        }
+
+        [Test] public async Task WholeFileButton_PickedWhenEveryPlaceHasThatPick()
+        {
+            await MergeAsync(ConflictScenarios.TwoPlaces);
+            var p = await PanelAsync();
+
+            p.PickAll(ConflictPick.Ours);
+            Assert.That(ButtonTexts(p.Q(UiNames.ConflictWholeFile)), Is.EqualTo(new[] { "✓ Use main", "Use feature", "Use main then feature", "Use feature then main" }));
+
+            p.SelectPlace(1);
+            p.Pick(ConflictPick.Theirs);
+            Assert.That(ButtonTexts(p.Q(UiNames.ConflictWholeFile)), Is.EqualTo(Options));
+        }
+
+        [Test] public async Task Place_HasNoTitle_KeepsTheChip()
+        {
+            await MergeAsync(ConflictScenarios.TwoPlaces);
+            var p = await PanelAsync();
+
+            var texts = Place(p, 1).Query<Label>().ToList().Select(l => l.text).ToList();
+            Assert.That(texts, Has.None.StartsWith("Place "));
+            Assert.That(Place(p, 1).Q<Label>(className: EditorUiClasses.Chip).text, Is.EqualTo("Not chosen"));
         }
 
         [Test] public async Task Outcome_ResolveButton_OpensConflicts()

@@ -521,10 +521,13 @@
     margin-bottom: 2px;
 }
 
-.unitygit-window .unity-button.unitygit-conflict-option--picked {
-    color: var(--ed-accent-text);
-    background-color: var(--ed-accent-tint);
-    border-color: var(--ed-accent);
+/* The picked option: filled in the success green (the green of a chosen place). The hover rule is needed: the kit's
+   .ed-root .unity-button:hover:enabled is more specific than the rule above and would win while the pointer is over it. */
+.unitygit-window .unity-button.unitygit-conflict-option--picked,
+.unitygit-window .unity-button.unitygit-conflict-option--picked:hover:enabled {
+    color: var(--ed-text-on-accent);
+    background-color: var(--ed-success);
+    border-color: var(--ed-success);
 }
 
 .unitygit-conflict-places {
@@ -609,12 +612,6 @@
     align-items: center;
 }
 
-.unitygit-conflict-place-title {
-    flex-grow: 1;
-    flex-shrink: 1;
-    padding-left: 0;
-}
-
 .unitygit-window .unitygit-conflict-place-header > .ed-chip {
     margin-right: 0;
     margin-bottom: 0;
@@ -644,6 +641,18 @@
 
 .unitygit-conflict-side--theirs {
     border-left-color: var(--ed-accent);
+}
+
+/* The sides the selected place's pick uses, and the ones it leaves out. The wider edge takes its extra pixel from the
+   margin, so the text doesn't move when a pick is made. */
+.unitygit-conflict-side.unitygit-conflict-side--used {
+    border-left-color: var(--ed-success);
+    border-left-width: 3px;
+    margin-left: -1px;
+}
+
+.unitygit-conflict-side.unitygit-conflict-side--unused {
+    opacity: 0.5;
 }
 
 .unitygit-conflict-preview-box {

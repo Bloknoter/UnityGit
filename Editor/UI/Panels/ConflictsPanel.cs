@@ -21,6 +21,7 @@ namespace UnityGit.UI
     {
         /// <summary>Marks the option button that matches the pending pick.</summary>
         internal const string PickedClass = "unitygit-conflict-option--picked";
+        const string PickedMark = "✓ ";
 
         /// <summary>The four options, in the order their buttons appear.</summary>
         internal static readonly ConflictPick[] AllPicks = { ConflictPick.Ours, ConflictPick.Theirs, ConflictPick.OursThenTheirs, ConflictPick.TheirsThenOurs };
@@ -46,6 +47,7 @@ namespace UnityGit.UI
         readonly VisualElement _wholeFileButtons;
         readonly ScrollView _places;
         readonly List<ConflictPlaceView> _placeViews = new List<ConflictPlaceView>();
+        readonly List<(ConflictPick Pick, Button Button)> _pickAllButtons = new List<(ConflictPick, Button)>();
         Button? _useOurs;
         Button? _useTheirs;
         readonly Button _openEditor;
@@ -528,6 +530,7 @@ namespace UnityGit.UI
             _places.Clear();
             _placeViews.Clear();
             _wholeFileButtons.Clear();
+            _pickAllButtons.Clear();
             _useOurs = _useTheirs = null;
             var file = File;
             if (file == null) return;
@@ -555,7 +558,12 @@ namespace UnityGit.UI
                 return;
             }
 
-            foreach (var pick in AllPicks) _wholeFileButtons.Add(OptionButton(file.Label(pick), () => PickAll(pick)));
+            foreach (var pick in AllPicks)
+            {
+                var button = OptionButton(file.Label(pick), () => PickAll(pick));
+                _pickAllButtons.Add((pick, button));
+                _wholeFileButtons.Add(button);
+            }
             var parts = file.Parts;
             for (var i = 0; i < parts.Count; i++)
             {
@@ -603,10 +611,23 @@ namespace UnityGit.UI
         void ShowPicks()
         {
             foreach (var view in _placeViews) view.Show(view.Index == SelectedPlace, PickOf(view.Index));
+            var everyPlace = PickOfEveryPlace();
+            foreach (var (pick, button) in _pickAllButtons) SetPicked(button, pick == everyPlace);
             var side = SidePick;
-            _useOurs?.EnableInClassList(PickedClass, side == true);
-            _useTheirs?.EnableInClassList(PickedClass, side == false);
+            if (_useOurs != null) SetPicked(_useOurs, side == true);
+            if (_useTheirs != null) SetPicked(_useTheirs, side == false);
             RenderActions();
+        }
+
+        // The pick every place of the selected file has, or null when a place has none or they differ.
+        ConflictPick? PickOfEveryPlace()
+        {
+            var file = File;
+            if (file == null || file.Places.Count == 0) return null;
+            var first = PickOf(0);
+            for (var i = 1; i < file.Places.Count && first != null; i++)
+                if (PickOf(i) != first) return null;
+            return first;
         }
 
         void ScrollToSelectedPlace()
@@ -673,11 +694,20 @@ namespace UnityGit.UI
         internal static Label FileText(string text, string textClass)
             => Plain(PanelParts.Text(text, EditorUiClasses.Mono, "unitygit-conflict-code", textClass));
 
+        // The button keeps its plain text in userData, so SetPicked can take the mark off again.
         internal static Button OptionButton(string text, Action onClick)
         {
-            var button = Plain(new Button(onClick) { text = text });
+            var button = Plain(new Button(onClick) { text = text, userData = text });
             button.AddToClassList("unitygit-conflict-option");
             return button;
+        }
+
+        /// <summary>Fills a picked option button and puts "✓ " before its text; unpicked, it shows as made.</summary>
+        internal static void SetPicked(Button button, bool picked)
+        {
+            button.EnableInClassList(PickedClass, picked);
+            var text = button.userData as string ?? button.text;
+            button.text = picked ? PickedMark + text : text;
         }
 
         static EditorUiTone TypeTone(ConflictType type)

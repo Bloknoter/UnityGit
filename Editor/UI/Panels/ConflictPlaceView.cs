@@ -7,13 +7,15 @@ using UnityGit.UI.Theme;
 namespace UnityGit.UI
 {
     /// <summary>
-    /// One place of the file shown in the <see cref="ConflictsPanel"/>: its header and a chip with the pick. While selected
-    /// it also shows both sides (and the base) and the pick buttons; while not selected but picked, the text the pick
-    /// gives. Clicking it selects it. The panel keeps the picks and the selection and calls <see cref="Show"/>.
+    /// One place of the file shown in the <see cref="ConflictsPanel"/>: a chip with the pick. While selected it also shows
+    /// both sides (and the base) and the pick buttons, marking the sides the pick uses; while not selected but picked, the
+    /// text the pick gives. Clicking it selects it. The panel keeps the picks and the selection and calls <see cref="Show"/>.
     /// </summary>
     internal sealed class ConflictPlaceView : VisualElement
     {
         const string PlaceClass = "unitygit-conflict-place";
+        const string UsedSideClass = "unitygit-conflict-side--used";
+        const string UnusedSideClass = "unitygit-conflict-side--unused";
 
         readonly ConflictsPanel _panel;
         readonly ConflictPlace _place;
@@ -21,6 +23,8 @@ namespace UnityGit.UI
         readonly List<(ConflictPick Pick, Button Button)> _options = new List<(ConflictPick, Button)>();
         // Built when first needed, so a file with many places doesn't lay out every side up front.
         VisualElement? _detail;
+        VisualElement? _ours;
+        VisualElement? _theirs;
         VisualElement? _buttons;
         Button? _clear;
         VisualElement? _preview;
@@ -34,9 +38,7 @@ namespace UnityGit.UI
             AddToClassList(PlaceClass);
             var header = new VisualElement();
             header.AddToClassList("unitygit-conflict-place-header");
-            header.Add(PanelParts.Text($"Place {PanelParts.Count(place.Index + 1)} · lines {PanelParts.Count(place.StartLine)}–{PanelParts.Count(place.EndLine)}",
-                EditorUiClasses.Strong, "unitygit-conflict-place-title"));
-            header.Add(_chip);
+            header.Add(_chip); // no title: the line numbers say where the place is
             Add(header);
             // A pick button's Clickable stops the pointer event, so picking doesn't select this place again.
             RegisterCallback<PointerDownEvent>(_ => _panel.SelectPlace(_place.Index));
@@ -55,7 +57,10 @@ namespace UnityGit.UI
             {
                 var detail = _detail ??= BuildDetail();
                 if (detail.parent == null) Add(detail);
-                foreach (var (option, button) in _options) button.EnableInClassList(ConflictsPanel.PickedClass, option == pick);
+                foreach (var (option, button) in _options) ConflictsPanel.SetPicked(button, option == pick);
+                // Use A uses A, Use B uses B, either order both; the base never. No pick: the sides look as made.
+                MarkSide(_ours!, pick == null ? (bool?)null : pick != ConflictPick.Theirs);
+                MarkSide(_theirs!, pick == null ? (bool?)null : pick != ConflictPick.Ours);
                 if (pick == null) _clear!.RemoveFromHierarchy();
                 else if (_clear!.parent == null) _buttons!.Add(_clear);
             }
@@ -80,9 +85,9 @@ namespace UnityGit.UI
         {
             var detail = new VisualElement();
             detail.AddToClassList("unitygit-conflict-place-detail");
-            detail.Add(Side(_place.OursName, _place.Ours, "ours"));
+            detail.Add(_ours = Side(_place.OursName, _place.Ours, "ours"));
             if (_place.Base != null) detail.Add(Side("base", _place.Base, "base"));
-            detail.Add(Side(_place.TheirsName, _place.Theirs, "theirs"));
+            detail.Add(_theirs = Side(_place.TheirsName, _place.Theirs, "theirs"));
 
             _buttons = new VisualElement { name = UiNames.ConflictPlaceButtons };
             _buttons.AddToClassList("unitygit-conflict-options");
@@ -96,6 +101,12 @@ namespace UnityGit.UI
             _clear.AddToClassList("unitygit-conflict-clear");
             detail.Add(_buttons);
             return detail;
+        }
+
+        static void MarkSide(VisualElement block, bool? used)
+        {
+            block.EnableInClassList(UsedSideClass, used == true);
+            block.EnableInClassList(UnusedSideClass, used == false);
         }
 
         void SetChip(string text, EditorUiTone tone)
