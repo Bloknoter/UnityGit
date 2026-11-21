@@ -52,6 +52,7 @@ Action rules:
 The Conflicts tab appears while a file is conflicted or a merge or rebase is in progress. Pull's conflict message says "resolve them in Conflicts", and the outcome bar has a **Resolve conflicts** button.
 
 - Pick **Use A**, **Use B**, **A then B** or **B then A** for each conflict place, or for the whole file. Choices are a preview until you click **Apply**. Places left without a choice keep their conflict markers. When none remain, the file is staged.
+- Each line of the preview shows its line number in the file as it is on disk, so it matches your editor.
 - Binary files, LFS-tracked files, files deleted on one side and files whose conflict markers can't be read offer only **Use A** and **Use B**, which take that side's whole file.
 - **Mark resolved** accepts a file you edited by hand. **Start over** restores the conflict markers (it asks first). **Open in editor** opens the file at the selected place.
 - A text file whose conflict markers you removed by hand is finished with **Mark resolved**. **Use A** and **Use B** aren't offered for it: taking a whole side would drop your edits and the changes git merged cleanly from the other side.

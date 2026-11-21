@@ -13,47 +13,84 @@ namespace UnityGit.Tests
         static (string?, int)[] Pieces(string text, bool placeBefore, bool placeAfter)
             => ConflictText.Context(text, placeBefore, placeAfter).Select(p => (p.Text, p.Collapsed)).ToArray();
 
-        [Test] public void ForDisplay_DropsCrAndOneTrailingNewline()
-        {
-            Assert.That(ConflictText.ForDisplay("a\r\nb\r\n"), Is.EqualTo("a\nb"));
-            Assert.That(ConflictText.ForDisplay("a\n\n"), Is.EqualTo("a\n"));
-        }
+        static ConflictPlace PlaceAt(int start, int end, string ours, string theirs, string? @base = null)
+            => new ConflictPlace { StartLine = start, EndLine = end, Ours = ours, Theirs = theirs, Base = @base };
 
-        [Test] public void Cap_KeepsFirstLinesAndCountsTheRest()
+        [Test] public void Rows_KeepsFirstLinesAndCountsTheRest()
         {
             var text = string.Join("\n", Enumerable.Range(1, 205).Select(i => $"line {i}"));
 
-            var (shown, hidden) = ConflictText.Cap(text);
+            var (rows, hidden) = ConflictText.Rows(new[] { (text, 1) });
 
-            var lines = shown.Split('\n');
-            Assert.That(lines, Has.Length.EqualTo(200));
-            Assert.That((lines.First(), lines.Last()), Is.EqualTo(("line 1", "line 200")));
+            var texts = rows.Select(r => r.Text).ToArray();
+            Assert.That(texts, Has.Length.EqualTo(200));
+            Assert.That((texts.First(), texts.Last()), Is.EqualTo(("line 1", "line 200")));
+            Assert.That((rows[0].Line, rows[199].Line), Is.EqualTo((1, 200)));
             Assert.That(hidden, Is.EqualTo(5));
-            Assert.That(ConflictText.Cap("a\nb\nc"), Is.EqualTo(("a\nb\nc", 0)));
+            var (all, none) = ConflictText.Rows(new[] { ("a\nb\nc", 1) });
+            Assert.That(all.Select(r => r.Text), Is.EqualTo(new[] { "a", "b", "c" }));
+            Assert.That(none, Is.Zero);
         }
 
         // Text-serialized meshes and terrains have single lines of hundreds of KB: each reaches a label cut short.
-        [Test] public void Cap_TruncatesVeryLongLines()
+        [Test] public void Rows_TruncatesVeryLongLines()
         {
-            var (shown, hidden) = ConflictText.Cap(new string('x', 5000));
+            var (rows, hidden) = ConflictText.Rows(new[] { (new string('x', 5000), 1) });
 
-            Assert.That(shown, Is.EqualTo(new string('x', 1000) + "…"));
+            Assert.That(rows.Select(r => r.Text), Is.EqualTo(new[] { new string('x', 1000) + "…" }));
             Assert.That(hidden, Is.EqualTo(0));
-            Assert.That(ConflictText.Cap("a\n" + new string('x', 1001) + "\nb"), Is.EqualTo(("a\n" + new string('x', 1000) + "…\nb", 0)));
+            Assert.That(ConflictText.Rows(new[] { ("a\n" + new string('x', 1001) + "\nb", 1) }).Rows.Select(r => r.Text),
+                Is.EqualTo(new[] { "a", new string('x', 1000) + "…", "b" }));
         }
 
-        [Test] public void Cap_StopsAtBlockBudget()
+        [Test] public void Rows_StopsAtBlockBudget()
         {
             var text = string.Join("\n", Enumerable.Repeat(new string('x', 900), 100));
 
-            var (shown, hidden) = ConflictText.Cap(text);
+            var (rows, hidden) = ConflictText.Rows(new[] { (text, 1) });
 
-            var lines = shown.Split('\n');
-            Assert.That(lines.Length, Is.LessThan(ConflictText.MaxSideLines));
+            Assert.That(rows.Count, Is.LessThan(ConflictText.MaxSideLines));
             Assert.That(hidden, Is.GreaterThan(0));
-            Assert.That(lines.Length + hidden, Is.EqualTo(100));
-            Assert.That(shown.Length, Is.LessThanOrEqualTo(ConflictText.MaxBlockChars));
-            Assert.That(lines, Is.All.EqualTo(new string('x', 900)));
+            Assert.That(rows.Count + hidden, Is.EqualTo(100));
+            Assert.That(rows.Sum(r => r.Text.Length) + rows.Count - 1, Is.LessThanOrEqualTo(ConflictText.MaxBlockChars));
+            Assert.That(rows.Select(r => r.Text), Is.All.EqualTo(new string('x', 900)));
+        }
+
+        [Test] public void LineCount_CountsLikeTheFile()
+            => Assert.That(new[] { "", "a", "a\n", "a\nb\n", "a\r\nb" }.Select(ConflictText.LineCount), Is.EqualTo(new[] { 0, 1, 1, 2, 2 }));
+
+        [Test] public void SideStarts_FollowTheMarkers()
+        {
+            var plain = ConflictText.SideStarts(PlaceAt(2, 6, "x\n", "y\n"));
+            Assert.That((plain.Ours, plain.Theirs), Is.EqualTo((3, 5)));
+            Assert.That(ConflictText.SideStarts(PlaceAt(2, 8, "x\n", "y\n", "b\n")), Is.EqualTo((3, 5, 7)));
+            Assert.That(ConflictText.SideStarts(PlaceAt(10, 15, "", "y\n", "b\n")), Is.EqualTo((11, 12, 14))); // A removed its lines
+            Assert.That(ConflictText.SideStarts(PlaceAt(1, 5, "x\n", "y")).Theirs, Is.EqualTo(4));            // no final newline
+        }
+
+        [Test] public void Rows_NumberEachSegmentFromItsFirstLine()
+        {
+            var (rows, hidden) = ConflictText.Rows(new[] { ("a\r\nb\n", 3), ("c\n", 10) });
+            Assert.That(rows.Select(r => (r.Line, r.Text)), Is.EqualTo(new[] { (3, "a"), (4, "b"), (10, "c") }));
+            Assert.That(hidden, Is.Zero);
+        }
+
+        [Test] public void Rows_CapAcrossSegments()
+        {
+            var (rows, hidden) = ConflictText.Rows(new[] { (Lines(1, 150), 1), (Lines(1, 100), 500) });
+            Assert.That((rows.Count, rows[149].Line, rows[150].Line, rows[199].Line, hidden), Is.EqualTo((200, 150, 500, 549, 50)));
+        }
+
+        [Test] public void Context_GivesEachPieceItsFirstLine()
+        {
+            Assert.That(ConflictText.Context(Lines(1, 10), true, true).Select(p => p.Line), Is.EqualTo(new[] { 0, 3, 7 }));
+            Assert.That(ConflictText.Context(Lines(1, 10), false, true).Select(p => p.Line), Is.EqualTo(new[] { 0, 7 }));
+        }
+
+        [Test] public void GutterWidth_FitsTheLargestNumber()
+        {
+            Assert.That(ConflictsPanel.GutterWidth(9), Is.EqualTo(ConflictsPanel.GutterWidth(99)));
+            Assert.That(ConflictsPanel.GutterWidth(12345), Is.GreaterThan(ConflictsPanel.GutterWidth(999)));
         }
 
         [Test] public void Context_TruncatesVeryLongLines()

@@ -73,7 +73,7 @@ namespace UnityGit.UI
                     _preview?.RemoveFromHierarchy();
                     _preview = new VisualElement();
                     _preview.AddToClassList("unitygit-conflict-preview-box");
-                    AddCapped(_preview, _place.TextFor(chosen), "unitygit-conflict-preview");
+                    AddCapped(_preview, PreviewSegments(chosen), "unitygit-conflict-preview");
                     _previewPick = chosen;
                 }
                 if (_preview.parent == null) Add(_preview);
@@ -85,9 +85,10 @@ namespace UnityGit.UI
         {
             var detail = new VisualElement();
             detail.AddToClassList("unitygit-conflict-place-detail");
-            detail.Add(_ours = Side(_place.OursName, _place.Ours, "ours"));
-            if (_place.Base != null) detail.Add(Side("base", _place.Base, "base"));
-            detail.Add(_theirs = Side(_place.TheirsName, _place.Theirs, "theirs"));
+            var starts = ConflictText.SideStarts(_place);
+            detail.Add(_ours = Side(_place.OursName, _place.Ours, starts.Ours, "ours"));
+            if (_place.Base != null) detail.Add(Side("base", _place.Base, starts.Base, "base"));
+            detail.Add(_theirs = Side(_place.TheirsName, _place.Theirs, starts.Theirs, "theirs"));
 
             _buttons = new VisualElement { name = UiNames.ConflictPlaceButtons };
             _buttons.AddToClassList("unitygit-conflict-options");
@@ -116,23 +117,39 @@ namespace UnityGit.UI
             _chip.AddToClassList(EditorUiClasses.ChipTone(tone));
         }
 
-        static VisualElement Side(string caption, string text, string side)
+        // A side's lines, numbered from the line it starts on in the file.
+        VisualElement Side(string caption, string text, int firstLine, string side)
         {
             var block = new VisualElement();
             block.AddToClassList("unitygit-conflict-side");
             block.AddToClassList("unitygit-conflict-side--" + side);
             block.Add(ConflictsPanel.Plain(PanelParts.Text(caption, EditorUiClasses.Muted, EditorUiClasses.Small, "unitygit-conflict-side-caption")));
-            if (text.Length == 0) block.Add(PanelParts.Text("(no lines)", EditorUiClasses.Muted, EditorUiClasses.Small, "unitygit-conflict-no-lines")); // that side removed them
-            else AddCapped(block, text, "unitygit-conflict-text");
+            AddCapped(block, new[] { (text, firstLine) }, "unitygit-conflict-text");
             return block;
         }
 
-        // A side's or a pick's text, capped by ConflictText.Cap (lines, characters per line and per block), then how many
-        // more lines the file has.
-        static void AddCapped(VisualElement parent, string text, string textClass)
+        // The sides a pick takes, in its order, each numbered from where it starts in the file.
+        IReadOnlyList<(string Text, int FirstLine)> PreviewSegments(ConflictPick pick)
         {
-            var (shown, hidden) = ConflictText.Cap(ConflictText.ForDisplay(text));
-            parent.Add(ConflictsPanel.FileText(shown, textClass));
+            var starts = ConflictText.SideStarts(_place);
+            var ours = (_place.Ours, starts.Ours);
+            var theirs = (_place.Theirs, starts.Theirs);
+            switch (pick)
+            {
+                case ConflictPick.Ours: return new[] { ours };
+                case ConflictPick.Theirs: return new[] { theirs };
+                case ConflictPick.OursThenTheirs: return new[] { ours, theirs };
+                default: return new[] { theirs, ours };
+            }
+        }
+
+        // Numbered rows of the text, capped by ConflictText.Rows (lines, characters per line and per block), then how many
+        // more lines the file has. Text without lines says so: that side removed them.
+        void AddCapped(VisualElement parent, IReadOnlyList<(string Text, int FirstLine)> segments, string textClass)
+        {
+            var (rows, hidden) = ConflictText.Rows(segments);
+            if (rows.Count == 0 && hidden == 0) parent.Add(PanelParts.Text("(no lines)", EditorUiClasses.Muted, EditorUiClasses.Small, "unitygit-conflict-no-lines"));
+            _panel.AddRows(parent, rows, textClass);
             if (hidden > 0) parent.Add(PanelParts.Text(ConflictText.MoreLines(hidden), EditorUiClasses.Muted, EditorUiClasses.Small, "unitygit-conflict-more"));
         }
     }

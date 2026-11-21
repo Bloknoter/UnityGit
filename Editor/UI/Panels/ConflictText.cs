@@ -8,10 +8,11 @@ namespace UnityGit.UI
     /// <summary>Unchanged text around a conflict place: lines shown as they are, or a run of lines collapsed to a count.</summary>
     internal readonly struct ContextPiece
     {
-        ContextPiece(string? text, int collapsed)
+        ContextPiece(string? text, int collapsed, int line)
         {
             Text = text;
             Collapsed = collapsed;
+            Line = line;
         }
 
         /// <summary>The lines shown, with their line breaks; null for a collapsed run.</summary>
@@ -20,8 +21,24 @@ namespace UnityGit.UI
         /// <summary>How many lines the run hides; 0 for shown lines.</summary>
         public int Collapsed { get; }
 
-        public static ContextPiece Lines(string text) => new ContextPiece(text, 0);
-        public static ContextPiece Run(int lines) => new ContextPiece(null, lines);
+        /// <summary>The 0-based index, within the unchanged run, of the piece's first line (of a collapsed run, its first hidden one).</summary>
+        public int Line { get; }
+
+        public static ContextPiece Lines(string text, int line) => new ContextPiece(text, 0, line);
+        public static ContextPiece Run(int lines, int line) => new ContextPiece(null, lines, line);
+    }
+
+    /// <summary>One line of the file as the conflict preview shows it: its 1-based line number on disk and its text.</summary>
+    internal readonly struct CodeRow
+    {
+        public CodeRow(int line, string text)
+        {
+            Line = line;
+            Text = text;
+        }
+
+        public int Line { get; }
+        public string Text { get; }
     }
 
     /// <summary>
@@ -38,43 +55,61 @@ namespace UnityGit.UI
         /// <summary>A longer line shows its first this many characters and "…".</summary>
         public const int MaxLineChars = 1000;
 
-        /// <summary>The most characters <see cref="Cap"/> shows of one block; the lines after it are counted instead.</summary>
+        /// <summary>The most characters <see cref="Rows"/> shows of one block; the lines after it are counted instead.</summary>
         public const int MaxBlockChars = 20000;
 
         // A run is collapsed only when it hides at least this many lines: "⋯ 1 unchanged line" takes a line itself.
         const int MinCollapsed = 2;
 
-        /// <summary>The text for a label: CR characters dropped, and one trailing line break, which would show as an empty line.</summary>
-        public static string ForDisplay(string text)
-        {
-            var shown = text.Replace("\r", string.Empty);
-            return shown.EndsWith("\n", StringComparison.Ordinal) ? shown.Substring(0, shown.Length - 1) : shown;
-        }
+        /// <summary>How many lines the file has for this text: a trailing line break doesn't start a line, "" has none, CR is ignored.</summary>
+        public static int LineCount(string text) => CountLines(text, 0);
 
         /// <summary>
-        /// The first <paramref name="maxLines"/> lines of <paramref name="text"/> (a <see cref="ForDisplay"/> result), each
-        /// cut to <see cref="MaxLineChars"/>, as many as fit in <see cref="MaxBlockChars"/> (the first always does), and
-        /// how many lines are left out. One trailing line break doesn't start another line.
+        /// The line on disk where each side of the place starts, the conflict markers counted: A after <c>&lt;&lt;&lt;&lt;&lt;&lt;&lt;</c>,
+        /// the base after <c>|||||||</c> and B after <c>=======</c>. Base means nothing when the place has none.
         /// </summary>
-        public static (string Shown, int Hidden) Cap(string text, int maxLines = MaxSideLines)
+        public static (int Ours, int Base, int Theirs) SideStarts(ConflictPlace place)
+            => (place.StartLine + 1, place.StartLine + LineCount(place.Ours) + 2, place.EndLine - LineCount(place.Theirs));
+
+        /// <summary>
+        /// The rows to show of text that runs in segments, each numbered from its own first line: CR dropped, each line cut to
+        /// <see cref="MaxLineChars"/>, at most <paramref name="maxLines"/> rows and <see cref="MaxBlockChars"/> characters
+        /// (a line break between rows counts as one; the first row always fits), and how many lines are left out. A trailing
+        /// line break doesn't start another row.
+        /// </summary>
+        public static (IReadOnlyList<CodeRow> Rows, int Hidden) Rows(IReadOnlyList<(string Text, int FirstLine)> segments, int maxLines = MaxSideLines)
         {
             if (maxLines < 1) throw new ArgumentOutOfRangeException(nameof(maxLines));
-            var shown = new StringBuilder();
-            var lines = 0;
-            var cut = false;
-            var start = 0;
-            while (start < text.Length && lines < maxLines)
+            var rows = new List<CodeRow>();
+            var line = new StringBuilder();
+            var chars = 0;
+            var hidden = 0;
+            var full = false;
+            foreach (var (text, firstLine) in segments)
             {
-                var end = text.IndexOf('\n', start);
-                var length = (end < 0 ? text.Length : end) - start;
-                if (lines > 0 && shown.Length + 1 + ShownLength(length) > MaxBlockChars) break;
-                if (lines > 0) shown.Append('\n');
-                cut |= AppendLine(shown, text, start, length);
-                lines++;
-                start = end < 0 ? text.Length : end + 1;
+                if (full)
+                {
+                    hidden += LineCount(text);
+                    continue;
+                }
+                var number = firstLine;
+                for (var start = 0; start < text.Length;)
+                {
+                    var end = text.IndexOf('\n', start);
+                    var stop = end < 0 ? text.Length : end;
+                    var shown = rows.Count < maxLines ? ShownLine(line, text, start, stop) : null;
+                    if (shown == null || (rows.Count > 0 && chars + 1 + shown.Length > MaxBlockChars))
+                    {
+                        full = true;
+                        hidden += CountLines(text, start);
+                        break;
+                    }
+                    chars += (rows.Count > 0 ? 1 : 0) + shown.Length;
+                    rows.Add(new CodeRow(number++, shown));
+                    start = end < 0 ? text.Length : end + 1;
+                }
             }
-            var hidden = CountLines(text, start);
-            return hidden == 0 && !cut ? (text, 0) : (shown.ToString(), hidden);
+            return (rows, hidden);
         }
 
         /// <summary>
@@ -91,12 +126,12 @@ namespace UnityGit.UI
             var head = placeBefore ? ContextLines : 0;
             var tail = placeAfter ? ContextLines : 0;
             var hidden = count - head - tail;
-            if (hidden < MinCollapsed) return new[] { ContextPiece.Lines(CutLongLines(text)) };
+            if (hidden < MinCollapsed) return new[] { ContextPiece.Lines(CutLongLines(text), 0) };
 
             var pieces = new List<ContextPiece>(3);
-            if (head > 0) pieces.Add(ContextPiece.Lines(CutLongLines(text.Substring(0, starts[head]))));
-            pieces.Add(ContextPiece.Run(hidden));
-            if (tail > 0) pieces.Add(ContextPiece.Lines(CutLongLines(text.Substring(starts[count - tail]))));
+            if (head > 0) pieces.Add(ContextPiece.Lines(CutLongLines(text.Substring(0, starts[head])), 0));
+            pieces.Add(ContextPiece.Run(hidden, head));
+            if (tail > 0) pieces.Add(ContextPiece.Lines(CutLongLines(text.Substring(starts[count - tail])), count - tail));
             return pieces;
         }
 
@@ -104,7 +139,7 @@ namespace UnityGit.UI
         public static string Unchanged(int lines)
             => lines == 1 ? "⋯ 1 unchanged line" : $"⋯ {PanelParts.Count(lines)} unchanged lines";
 
-        /// <summary>"⋯ 51 more lines — open the file to see all": what <see cref="Cap"/> left out of a side.</summary>
+        /// <summary>"⋯ 51 more lines — open the file to see all": what <see cref="Rows"/> left out of a side.</summary>
         public static string MoreLines(int lines)
             => $"⋯ {PanelParts.Count(lines)} more {(lines == 1 ? "line" : "lines")} — open the file to see all";
 
@@ -138,10 +173,26 @@ namespace UnityGit.UI
             return true;
         }
 
-        // How long AppendLine makes a line of this length.
-        static int ShownLength(int length) => length <= MaxLineChars ? length : MaxLineChars + 1;
+        // The line from start to stop as a row shows it: CR dropped, cut as AppendLine cuts. Reads at most MaxLineChars + 1
+        // characters (plus any CRs), so a line of hundreds of KB costs no more than a short one.
+        static string ShownLine(StringBuilder line, string text, int start, int stop)
+        {
+            line.Clear();
+            for (var i = start; i < stop; i++)
+            {
+                var c = text[i];
+                if (c == '\r') continue;
+                if (line.Length == MaxLineChars)
+                {
+                    if (char.IsHighSurrogate(line[line.Length - 1])) line.Length--; // a whole character
+                    return line.Append('…').ToString();
+                }
+                line.Append(c);
+            }
+            return line.ToString();
+        }
 
-        // The lines from start on, counted as Cap counts them.
+        // The lines from start on: a trailing line break doesn't start another one.
         static int CountLines(string text, int start)
         {
             if (start >= text.Length) return 0;

@@ -32,9 +32,15 @@ namespace UnityGit.Tests
             GitLocator.ClearCache();
         }
 
-        async Task MergeAsync(params ConflictFile[] files)
+        Task MergeAsync(params ConflictFile[] files) => MergeInStyleAsync(diff3: false, files);
+
+        // The same, with merge.conflictStyle=diff3: the markers hold the base too.
+        Task Diff3MergeAsync(ConflictFile file) => MergeInStyleAsync(diff3: true, file);
+
+        async Task MergeInStyleAsync(bool diff3, params ConflictFile[] files)
         {
             _repo = await _sb.InitRepoAsync("repo");
+            if (diff3) await _repo.Config.SetAsync("merge.conflictStyle", "diff3");
             await ConflictScenarios.MergeAsync(_repo, files);
             _s = _sb.CreateSession(_repo.WorkingDirectory, _hooks);
             await _s.RefreshAsync();
@@ -72,6 +78,7 @@ namespace UnityGit.Tests
 
         static string[] ButtonTexts(VisualElement? root) => root!.Query<Button>().ToList().Select(b => b.text).ToArray();
         static VisualElement Place(VisualElement p, int index) => p.Q(UiNames.ConflictPlacePrefix + index);
+        static string[] Numbers(VisualElement root) => root.Query<Label>(className: "unitygit-conflict-line-number").ToList().Select(l => l.text).ToArray();
         static Label LabelNamed(VisualElement p, string name) => p.Q<Label>(name);
         static Button ButtonNamed(VisualElement p, string name) => p.Q<Button>(name);
         string FilePath(string path) => Path.Combine(_repo.WorkingDirectory, path);
@@ -421,6 +428,8 @@ namespace UnityGit.Tests
             Assert.That(oursText.enableRichText, Is.False);
             Assert.That(oursText.text, Does.StartWith("<b>bold</b>"));
             Assert.That(place.Query<Label>().ToList().Select(l => l.text), Has.Member("⋯ 51 more lines — open the file to see all"));
+            var oursNumbers = Numbers(place.Q(className: "unitygit-conflict-side--ours")); // under the <<<<<<< on line 1
+            Assert.That((oursNumbers.Length, oursNumbers.First(), oursNumbers.Last()), Is.EqualTo((200, "2", "201")));
         }
 
         // A text-serialized mesh can hold a single line of hundreds of KB: no label gets it whole.
@@ -446,6 +455,7 @@ namespace UnityGit.Tests
             var place = Place(p, 0);
             Assert.That(place.Q(className: "unitygit-conflict-side--ours").Query<Label>().ToList().Select(l => l.text), Has.Member("(no lines)"));
             Assert.That(place.Q(className: "unitygit-conflict-side--theirs").Query<Label>().ToList().Select(l => l.text), Has.No.Member("(no lines)"));
+            Assert.That(Numbers(place.Q(className: "unitygit-conflict-side--ours")), Is.Empty);
         }
 
         // Rebase labels carry commit subjects, which may hold "<b>": side names show as typed.
@@ -514,6 +524,40 @@ namespace UnityGit.Tests
             var texts = Place(p, 1).Query<Label>().ToList().Select(l => l.text).ToList();
             Assert.That(texts, Has.None.StartsWith("Place "));
             Assert.That(Place(p, 1).Q<Label>(className: EditorUiClasses.Chip).text, Is.EqualTo("Not chosen"));
+        }
+
+        // f.txt on disk: 1 one, 2 <<<<<<<, 3 TWO main, 4 =======, 5 TWO feature, 6 >>>>>>>, 7–11 three…seven,
+        // 12 <<<<<<<, 13 EIGHT main, 14 =======, 15 EIGHT feature, 16 >>>>>>>, 17 nine. Place 0 is selected; place 1 shows no lines.
+        [Test] public async Task LineNumbers_FollowTheFileOnDisk()
+        {
+            await MergeAsync(ConflictScenarios.TwoPlaces);
+            var p = await PanelAsync();
+            Assert.That(Numbers(p.Q(UiNames.ConflictPlaces)), Is.EqualTo(new[] { "1", "3", "5", "7", "8", "9", "10", "11", "17" }));
+        }
+
+        [Test] public async Task LineNumbers_PreviewNumbersTheSidesItUses()
+        {
+            await MergeAsync(ConflictScenarios.TwoPlaces);
+            var p = await PanelAsync();
+            p.Pick(ConflictPick.TheirsThenOurs);
+            Assert.That(Numbers(Place(p, 0)), Is.EqualTo(new[] { "5", "3" }));
+            Assert.That(Place(p, 0).Query<Label>(className: "unitygit-conflict-preview").ToList().Select(l => l.text), Is.EqualTo(new[] { "TWO feature", "TWO main" }));
+        }
+
+        [Test] public async Task LineNumbers_Diff3_NumbersTheBase()
+        {
+            await Diff3MergeAsync(ConflictScenarios.TwoPlaces);
+            var p = await PanelAsync();
+            Assert.That(Numbers(Place(p, 0)), Is.EqualTo(new[] { "3", "5", "7" }));
+        }
+
+        // c.txt: 1 <<<<<<<, 2 L1 main, 3 =======, 4 L1 feature, 5 >>>>>>>, 6–23 L2…L19, 24 <<<<<<< …
+        [Test] public async Task LineNumbers_SkipCollapsedRuns()
+        {
+            string L(int from, int to) => string.Concat(Enumerable.Range(from, to - from + 1).Select(i => $"L{i}\n"));
+            await MergeAsync(ConflictScenarios.Text("c.txt", L(1, 20), "L1 main\n" + L(2, 19) + "L20 main\n", "L1 feature\n" + L(2, 19) + "L20 feature\n"));
+            var p = await PanelAsync();
+            Assert.That(Numbers(p.Q(UiNames.ConflictPlaces)), Is.EqualTo(new[] { "2", "4", "6", "7", "8", "21", "22", "23" }));
         }
 
         [Test] public async Task Outcome_ResolveButton_OpensConflicts()

@@ -23,6 +23,15 @@ namespace UnityGit.UI
         internal const string PickedClass = "unitygit-conflict-option--picked";
         const string PickedMark = "✓ ";
 
+        // The line-number column. These mirror GitWindow.uss: a monospace digit at --ed-font-s (11px) is about 7px wide;
+        // .unitygit-conflict-line-number has padding-right 6px; .unitygit-conflict-place has margin-left 4px (replaced inline
+        // here), a 3px left border and 8px padding, and .unitygit-conflict-side / -preview-box a 2px left border, so a row
+        // in a place starts PlaceInset px right of the place's margin.
+        const float DigitWidth = 7f;
+        const float GutterPadding = 6f;
+        const float PlaceMargin = 4f;
+        const float PlaceInset = 17f;
+
         /// <summary>The four options, in the order their buttons appear.</summary>
         internal static readonly ConflictPick[] AllPicks = { ConflictPick.Ours, ConflictPick.Theirs, ConflictPick.OursThenTheirs, ConflictPick.TheirsThenOurs };
 
@@ -48,6 +57,7 @@ namespace UnityGit.UI
         readonly ScrollView _places;
         readonly List<ConflictPlaceView> _placeViews = new List<ConflictPlaceView>();
         readonly List<(ConflictPick Pick, Button Button)> _pickAllButtons = new List<(ConflictPick, Button)>();
+        float _gutter = GutterWidth(1); // the number column's width for File
         Button? _useOurs;
         Button? _useTheirs;
         readonly Button _openEditor;
@@ -565,23 +575,77 @@ namespace UnityGit.UI
                 _wholeFileButtons.Add(button);
             }
             var parts = file.Parts;
+            _gutter = GutterWidth(LastLine(parts));
+            var line = 0; // the last line on disk before the part
             for (var i = 0; i < parts.Count; i++)
             {
                 var place = parts[i].Place;
                 if (place != null)
                 {
                     var view = new ConflictPlaceView(this, place);
+                    view.style.marginLeft = _gutter + PlaceMargin; // the place box starts right of the number column
                     _placeViews.Add(view);
                     _places.Add(view);
+                    line = place.EndLine;
                     continue;
                 }
+                var text = parts[i].Text ?? string.Empty;
                 var placeBefore = i > 0 && parts[i - 1].IsPlace;
                 var placeAfter = i + 1 < parts.Count && parts[i + 1].IsPlace;
-                foreach (var piece in ConflictText.Context(parts[i].Text ?? string.Empty, placeBefore, placeAfter))
-                    _places.Add(piece.Text != null
-                        ? FileText(ConflictText.ForDisplay(piece.Text), "unitygit-conflict-context")
-                        : PanelParts.Text(ConflictText.Unchanged(piece.Collapsed), EditorUiClasses.Faint, EditorUiClasses.Small, "unitygit-conflict-collapsed"));
+                foreach (var piece in ConflictText.Context(text, placeBefore, placeAfter))
+                {
+                    if (piece.Text != null)
+                    {
+                        AddRows(_places, ConflictText.Rows(new[] { (piece.Text, line + 1 + piece.Line) }, int.MaxValue).Rows, "unitygit-conflict-context");
+                        continue;
+                    }
+                    var collapsed = PanelParts.Text(ConflictText.Unchanged(piece.Collapsed), EditorUiClasses.Faint, EditorUiClasses.Small, "unitygit-conflict-collapsed");
+                    collapsed.style.marginLeft = _gutter; // in line with the text, not the numbers
+                    _places.Add(collapsed);
+                }
+                line += ConflictText.LineCount(text);
             }
+        }
+
+        // The file's last line on disk: the last place's >>>>>>> line, or the last line of the text after it.
+        static int LastLine(IReadOnlyList<ConflictPart> parts)
+        {
+            var line = 0;
+            foreach (var part in parts) line = part.Place?.EndLine ?? line + ConflictText.LineCount(part.Text ?? string.Empty);
+            return line;
+        }
+
+        /// <summary>
+        /// One row per line: its number in the muted column on the left, then its text. Rows in a place box put the number
+        /// left of the box, in the same column as the unchanged text's numbers.
+        /// </summary>
+        internal void AddRows(VisualElement parent, IReadOnlyList<CodeRow> rows, string textClass)
+        {
+            var inPlace = parent != _places;
+            foreach (var row in rows)
+            {
+                var element = new VisualElement();
+                element.AddToClassList("unitygit-conflict-row");
+                var number = PanelParts.Text(PanelParts.Count(row.Line), EditorUiClasses.Mono, "unitygit-conflict-line-number");
+                number.pickingMode = PickingMode.Ignore;
+                number.style.width = _gutter;
+                if (inPlace)
+                {
+                    number.style.position = Position.Absolute;
+                    number.style.left = -(_gutter + PlaceInset);
+                    number.style.top = 0;
+                }
+                element.Add(number);
+                element.Add(FileText(row.Text, textClass));
+                parent.Add(element);
+            }
+        }
+
+        /// <summary>The number column's width: room for the largest line number's digits (at least two) and its padding.</summary>
+        internal static float GutterWidth(int largestLine)
+        {
+            var digits = Math.Max(2, PanelParts.Count(Math.Max(largestLine, 1)).Length);
+            return digits * DigitWidth + GutterPadding;
         }
 
         static string? FileNote(ConflictFileInfo info)
