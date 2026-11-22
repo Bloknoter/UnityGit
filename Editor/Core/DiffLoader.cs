@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Threading;
 using FlexGit;
 
 namespace UnityGit
@@ -76,7 +77,8 @@ namespace UnityGit
         /// The start of a new file as every line added: its first <paramref name="maxRows"/> lines within
         /// <paramref name="maxBytes"/> bytes, the rest only counted. Binary (git's NUL check) gives no rows.
         /// </summary>
-        public static FileDiffView ReadNewFileHead(string path, string fullPath, bool untracked, int maxRows = MaxRows, int maxBytes = HeadReadBytes)
+        public static FileDiffView ReadNewFileHead(string path, string fullPath, bool untracked, int maxRows = MaxRows, int maxBytes = HeadReadBytes,
+            CancellationToken cancellationToken = default)
         {
             using var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
             var size = stream.Length;
@@ -103,6 +105,7 @@ namespace UnityGit
             int n;
             while ((n = stream.Read(block, 0, block.Length)) > 0)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 breaks += CountBreaks(block, n);
                 last = block[n - 1];
             }
@@ -128,6 +131,15 @@ namespace UnityGit
             view.AddedCount = total;
             view.HiddenLines = Math.Max(0, total - rows.Count);
             return view;
+        }
+
+        /// <summary>git's binary check on a file: a NUL byte in its first 8000 bytes.</summary>
+        public static bool StartsBinary(string fullPath)
+        {
+            using var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            var probe = new byte[BinaryProbeLength];
+            var read = ReadUpTo(stream, probe, probe.Length);
+            return Array.IndexOf(probe, (byte)0, 0, read) >= 0;
         }
 
         // The first old line a hunk covers. With no old lines, git gives the line it comes after.

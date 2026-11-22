@@ -2,6 +2,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using UnityEngine;
 using UnityEngine.UIElements;
@@ -40,6 +41,8 @@ namespace UnityGit.UI
         string? _previewPath;           // the file shown or being read; null while a note is shown
         RepoSnapshot? _previewSnapshot; // the snapshot that file was read for: a new one reads it again
         int _previewRequest;            // numbers the reads, so a result for an earlier selection is dropped
+        CancellationTokenSource? _previewCts; // cancels the running read when the selection moves on
+        ChangePreview? _shownPreview;   // what the preview shows now, so an unchanged re-read leaves it alone
 
         public ChangesPanel(GitSession session)
         {
@@ -316,9 +319,11 @@ namespace UnityGit.UI
             else if (_byPath[selected[0]].IsConflicted) note = PreviewText.Conflicted;
             if (note != null)
             {
+                CancelPreviewRead();
                 _previewRequest++;
                 _previewPath = null;
                 _previewSnapshot = null;
+                _shownPreview = null;
                 _preview.ShowNote(note);
                 PreviewLoad = Task.CompletedTask;
                 return;
@@ -327,20 +332,44 @@ namespace UnityGit.UI
             var row = _byPath[selected[0]];
             var snapshot = _session.Snapshot;
             if (row.Path == _previewPath && ReferenceEquals(snapshot, _previewSnapshot)) return;
-            if (row.Path != _previewPath) _preview.ShowLoading(row.Path);
+            if (row.Path != _previewPath)
+            {
+                _shownPreview = null;
+                _preview.ShowLoading(row.Path);
+            }
             _previewPath = row.Path;
             _previewSnapshot = snapshot;
-            PreviewLoad = LoadPreviewAsync(row, ++_previewRequest);
+            CancelPreviewRead();
+            _previewCts = new CancellationTokenSource();
+            PreviewLoad = LoadPreviewAsync(row, ++_previewRequest, _previewCts.Token);
         }
 
-        async Task LoadPreviewAsync(ChangeItem row, int request)
+        // Stops the read of a selection that has moved on, so its git processes don't hold up the next read (FlexGit runs
+        // one command per repository at a time). Not disposed: a token source without a timer needs no disposing, and the
+        // read may still be looking at the token.
+        void CancelPreviewRead()
+        {
+            _previewCts?.Cancel();
+            _previewCts = null;
+        }
+
+        async Task LoadPreviewAsync(ChangeItem row, int request, CancellationToken cancellationToken)
         {
             try
             {
-                var preview = await _session.LoadChangePreviewAsync(row);
+                var preview = await _session.LoadChangePreviewAsync(row, cancellationToken);
                 if (request != _previewRequest) return; // the selection or the snapshot moved on
-                if (preview == null) _preview.ShowNote(PreviewText.Failed);
-                else _preview.Show(preview);
+                if (preview == null)
+                {
+                    _shownPreview = null;
+                    _preview.ShowNote(PreviewText.Failed);
+                }
+                else if (_shownPreview == null || !_shownPreview.HasSameContent(preview))
+                {
+                    _shownPreview = preview;
+                    _preview.Show(preview);
+                }
+                // else: a refresh found the file as shown; rebuilding would lose the scroll position and stop a playing clip
             }
             catch (Exception ex)
             {

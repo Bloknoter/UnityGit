@@ -74,6 +74,24 @@ namespace UnityGit
         public int RemovedCount { get; internal set; }
 
         internal FileDiffView() { }
+
+        /// <summary>True when both say the same about the same file: same change, sizes, counts and rows.</summary>
+        public bool HasSameContent(FileDiffView other)
+        {
+            if (Path != other.Path || OldPath != other.OldPath || FullPath != other.FullPath || Change != other.Change
+                || IsUntracked != other.IsUntracked || IsBinary != other.IsBinary || IsLfs != other.IsLfs
+                || OldSize != other.OldSize || NewSize != other.NewSize || HiddenLines != other.HiddenLines
+                || AddedCount != other.AddedCount || RemovedCount != other.RemovedCount || Rows.Count != other.Rows.Count)
+                return false;
+            for (var i = 0; i < Rows.Count; i++)
+            {
+                var a = Rows[i];
+                var b = other.Rows[i];
+                if (a.Kind != b.Kind || a.Text != b.Text || a.OldLine != b.OldLine || a.NewLine != b.NewLine || a.GapLines != b.GapLines)
+                    return false;
+            }
+            return true;
+        }
     }
 
     /// <summary>The preview of one row of the Changes list: the file, and its .meta when the row holds one.</summary>
@@ -82,5 +100,13 @@ namespace UnityGit
         public FileDiffView File { get; internal set; } = new FileDiffView();
         public FileDiffView? Meta { get; internal set; }
         internal ChangePreview() { }
+
+        /// <summary>
+        /// True when a new read found nothing different, so a preview already on screen can stay as it is (its scroll
+        /// position and a playing clip with it). An image or audio file that kept its exact size counts as the same.
+        /// </summary>
+        public bool HasSameContent(ChangePreview other)
+            => File.HasSameContent(other.File)
+               && (Meta == null ? other.Meta == null : other.Meta != null && Meta.HasSameContent(other.Meta));
     }
 }

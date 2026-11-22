@@ -248,6 +248,39 @@ namespace UnityGit.Tests
         }
 
         [Test]
+        public async Task Load_LargeNewLfsFile_IsLfs()
+        {
+            var repo = await RepoAsync();
+            await GitSandbox.CommitFileAsync(repo, ".gitattributes", "*.bin filter=lfs diff=lfs merge=lfs -text\n", "lfs");
+            var bytes = new byte[DiffLoader.LargeNewFileBytes + 1024]; // zeros: binary
+            File.WriteAllBytes(Path.Combine(repo.WorkingDirectory, "model.bin"), bytes);
+
+            var f = (await LoadAsync(repo, "model.bin")).File;
+
+            Assert.That(f.IsLfs, Is.True);
+            Assert.That(f.Rows, Is.Empty);
+            Assert.That(f.NewSize, Is.EqualTo(bytes.Length));
+        }
+
+        [Test]
+        public async Task Load_CancelledToken_ReturnsNullWithoutWarning()
+        {
+            var repo = await RepoAsync();
+            await GitSandbox.CommitFileAsync(repo, "a.txt", "a\n", "base");
+            GitSandbox.WriteFile(repo, "a.txt", "b\n");
+            var s = await SessionAsync(repo);
+            var warnings = new System.Collections.Generic.List<string>();
+            s.Warning = w => { lock (warnings) warnings.Add(w); };
+            using var cts = new System.Threading.CancellationTokenSource();
+            cts.Cancel();
+
+            var preview = await s.LoadChangePreviewAsync(Row(s, "a.txt"), cts.Token);
+
+            Assert.That(preview, Is.Null);
+            Assert.That(warnings, Is.Empty);
+        }
+
+        [Test]
         public async Task Load_CrlfLines_NoCarriageReturn()
         {
             var repo = await RepoAsync();

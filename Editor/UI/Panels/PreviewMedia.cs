@@ -23,7 +23,10 @@ namespace UnityGit.UI
             var type = assetPath != null ? AssetDatabase.GetMainAssetTypeAtPath(assetPath) : null;
             if (type != null)
             {
-                if (typeof(Texture).IsAssignableFrom(type)) return (MediaKind.Image, assetPath);
+                // An image file, imported by Unity's texture importers. Render textures, cubemap and 3D texture assets are
+                // textures too, but text-serialized settings: they get their diff.
+                if (typeof(Texture).IsAssignableFrom(type) && IsImageImporter(AssetImporter.GetAtPath(assetPath)))
+                    return (MediaKind.Image, assetPath);
                 if (typeof(AudioClip).IsAssignableFrom(type)) return (MediaKind.Audio, assetPath);
                 return (MediaKind.None, assetPath);
             }
@@ -79,6 +82,8 @@ namespace UnityGit.UI
             if (logical != null && logical.StartsWith("Packages/", StringComparison.Ordinal)) return logical;
             return relative != null && relative.StartsWith("Packages/", StringComparison.Ordinal) ? relative : null;
         }
+
+        static bool IsImageImporter(AssetImporter? importer) => importer is TextureImporter || importer is IHVImageFormatImporter;
 
         static bool IsDecodableImage(string fullPath)
             => Array.IndexOf(DecodableImages, Path.GetExtension(fullPath).ToLowerInvariant()) >= 0;

@@ -359,6 +359,32 @@ namespace UnityGit.Tests
         }
 
         [Test]
+        public void Media_RenderTextureAsset_IsNone()
+        {
+            // A render texture is a text-serialized asset: its settings change shows as a diff, not as a blank picture.
+            if (!AssetDatabase.IsValidFolder(AssetFolder)) AssetDatabase.CreateFolder("Assets", "UnityGitPreviewTestTemp");
+            var assetPath = AssetFolder + "/target.renderTexture";
+            AssetDatabase.CreateAsset(new RenderTexture(4, 4, 0), assetPath);
+
+            Assert.That(PreviewMedia.Detect(Path.GetFullPath(assetPath)).Kind, Is.EqualTo(MediaKind.None));
+        }
+
+        [Test]
+        public async Task Preview_RefreshUnchangedFile_KeepsRows()
+        {
+            var (repo, s) = await RepoAsync(("a.txt", "a\n"));
+            GitSandbox.WriteFile(repo, "a.txt", "b\n");
+            var p = await PanelAsync(s, "a.txt");
+            var before = FileRows(p)[0];
+            await s.RefreshAsync(); // a new snapshot, as on focus or an asset import; the file is the same
+
+            p.Render();
+            await p.PreviewLoad;
+
+            Assert.That(FileRows(p)[0], Is.SameAs(before), "an unchanged file isn't rebuilt, so the scroll position and audio stay");
+        }
+
+        [Test]
         public void Audio_UtilResolves()
         {
             Assert.That(AudioPreview.IsAvailable, Is.True, "UnityEditor.AudioUtil has PlayPreviewClip, StopAllPreviewClips and IsPreviewClipPlaying");
