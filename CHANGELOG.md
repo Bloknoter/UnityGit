@@ -11,7 +11,7 @@
 
 - Requires FlexGit 2.2.0.
 - Conflicts tab: the selected file's places are to the right of the file list instead of under it, with a divider to resize them.
-- Changes tab: the commit message box and the Commit button are on one row.
+- Changes tab: the commit message box and the Commit button are on one row, under the file list.
 
 ## [1.1.0] - 2026-11-20
 

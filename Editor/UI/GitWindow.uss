@@ -401,7 +401,8 @@
 
 /* Changes and Conflicts: the file list on the left and the selected file on the right, a divider between them to drag
    (PanelParts.SideBySide; PanelParts.SplitListWidth is the list's start width). The split view sets the panes' width and
-   flex inline; these rules give the panes a floor and a gap. */
+   flex inline; these rules give the panes a floor and a gap. In Changes the left pane is a column of the list and the commit
+   bar, so the preview on the right runs the full height. */
 
 .unitygit-window .unitygit-split {
     flex-grow: 1;
@@ -409,14 +410,18 @@
     min-height: 120px;
 }
 
-.unitygit-window .ed-card.unitygit-split-list {
+.unitygit-window .unitygit-split-list {
     min-width: 160px;
     margin-right: var(--ed-space-1);
 }
 
-.unitygit-window .ed-card.unitygit-split-detail {
+.unitygit-window .unitygit-split-detail {
     min-width: 200px;
     margin-left: var(--ed-space-1);
+}
+
+.unitygit-changes-column {
+    flex-direction: column;
 }
 
 .unitygit-window .unitygit-preview-card {

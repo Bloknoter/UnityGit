@@ -49,7 +49,7 @@ Action rules:
 
 ## Change preview
 
-Select one file in Changes to see what changed in it since the last commit (staged and unstaged together, which is what Commit takes). The preview sits to the right of the list; drag the divider between them to resize. The commit message box and the Commit button share one row under both. It only reads: selecting a file never changes what is ticked.
+Select one file in Changes to see what changed in it since the last commit (staged and unstaged together, which is what Commit takes). The preview sits to the right of the list and runs the full height of the panel; drag the divider between them to resize. The commit message box and the Commit button share one row under the list. It only reads: selecting a file never changes what is ticked.
 
 - **Text files**: removed lines in red with `-`, added lines in green with `+`, three unchanged lines around each change, and the old and new line numbers. The header shows the path and `+added −removed`.
 - **New files**: the content with line numbers, no diff. **Deleted files**: the old content, every line red.

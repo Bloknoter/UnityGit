@@ -440,7 +440,27 @@ namespace UnityGit.Tests
             var panes = split.Children().ToList();
             Assert.That(panes, Has.Count.EqualTo(2));
             Assert.That(panes[0].Q<ListView>(UiNames.ChangesList), Is.Not.Null);
+            Assert.That(panes[0].Q<TextField>(UiNames.CommitMessage), Is.Not.Null, "the commit bar is under the list, in its column");
             Assert.That(panes[1], Is.SameAs(p.Preview));
+        }
+
+        [Test]
+        public async Task Layout_PreviewReachesTheBottom()
+        {
+            var (repo, s) = await RepoAsync();
+            GitSandbox.WriteFile(repo, "a.txt", "a\n");
+            await s.RefreshAsync();
+            var v = new GitWindowView(s);
+            using (var window = UnityGitTestWindow.Open(v))
+            {
+                v.SelectTab(WindowTab.Changes);
+                window.ResolveStylesAndLayout();
+
+                var preview = v.Q(UiNames.ChangesPreview).worldBound;
+                var submit = v.Q<Button>(UiNames.CommitSubmit).worldBound;
+                Assert.That(submit.xMax, Is.LessThanOrEqualTo(preview.xMin), "the commit bar stays left of the preview");
+                Assert.That(preview.yMax, Is.GreaterThanOrEqualTo(submit.yMax), "the preview runs down past the commit bar");
+            }
         }
 
         [Test]

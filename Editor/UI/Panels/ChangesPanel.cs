@@ -80,11 +80,7 @@ namespace UnityGit.UI
             var listCard = PanelParts.ListCard(null, _list);
             listCard.Insert(0, header);
 
-            // The list on the left, the preview of the selected file on the right, a divider between them to drag.
-            _preview = new ChangePreviewView();
-            Add(PanelParts.SideBySide(UiNames.ChangesSplit, listCard, _preview));
-
-            // The message box and the Commit button on one row, under both.
+            // The message box and the Commit button on one row, under the list.
             var commitCard = EditorUiElements.Card();
             commitCard.AddToClassList("unitygit-commit-card");
             var commitRow = new VisualElement();
@@ -104,7 +100,15 @@ namespace UnityGit.UI
             GitIcons.Apply(_submit, GitIcon.Commit);
             commitRow.Add(_submit);
             commitCard.Add(commitRow);
-            Add(commitCard);
+
+            // The list and the commit bar on the left, the preview of the selected file on the right, full height, with a
+            // divider between them to drag.
+            var column = new VisualElement();
+            column.AddToClassList("unitygit-changes-column");
+            column.Add(listCard);
+            column.Add(commitCard);
+            _preview = new ChangePreviewView();
+            Add(PanelParts.SideBySide(UiNames.ChangesSplit, column, _preview));
             Render();
         }
 
