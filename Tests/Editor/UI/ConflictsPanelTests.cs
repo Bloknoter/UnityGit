@@ -201,6 +201,22 @@ namespace UnityGit.Tests
             Assert.That(p.SelectedFile, Is.EqualTo("f.txt"));
         }
 
+        [Test] public async Task Layout_FilesBesideFile()
+        {
+            await MergeAsync(ConflictScenarios.TwoPlaces);
+
+            var p = await PanelAsync();
+
+            var split = p.Q<TwoPaneSplitView>(UiNames.ConflictsSplit);
+            Assert.That(split, Is.Not.Null);
+            Assert.That(split.orientation, Is.EqualTo(TwoPaneSplitViewOrientation.Horizontal), "the file is beside the list");
+            Assert.That(split.fixedPaneIndex, Is.EqualTo(0), "the list keeps its width; the file takes the rest");
+            var panes = split.Children().ToList();
+            Assert.That(panes, Has.Count.EqualTo(2));
+            Assert.That(panes[0].Q<ListView>(UiNames.ConflictsFiles), Is.Not.Null);
+            Assert.That(panes[1].Q(UiNames.ConflictPlaces), Is.Not.Null);
+        }
+
         [Test] public void Chip_AndTypeTexts()
         {
             Assert.That(ConflictsPanel.Chip(new ConflictFileInfo { PlaceCount = 2 }), Is.EqualTo("2 places"));

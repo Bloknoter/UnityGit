@@ -80,6 +80,28 @@ namespace UnityGit.UI
             return card;
         }
 
+        /// <summary>The file list's starting width in a <see cref="SideBySide"/> split.</summary>
+        public const float SplitListWidth = 320f;
+
+        /// <summary>
+        /// A file list on the left and what the selected file holds on the right, with a divider to drag between them
+        /// (Changes: the preview; Conflicts: the file's places). The list keeps its width when the window is resized.
+        /// </summary>
+        public static TwoPaneSplitView SideBySide(string name, VisualElement list, VisualElement detail)
+        {
+            var split = new TwoPaneSplitView(0, SplitListWidth, TwoPaneSplitViewOrientation.Horizontal)
+            {
+                name = name,
+                viewDataKey = name,
+            };
+            split.AddToClassList("unitygit-split");
+            list.AddToClassList("unitygit-split-list");
+            detail.AddToClassList("unitygit-split-detail");
+            split.Add(list);
+            split.Add(detail);
+            return split;
+        }
+
         /// <summary>A caption-and-value line inside a card: a muted caption, then the values side by side.</summary>
         public static VisualElement Field(string caption, params VisualElement[] values)
         {

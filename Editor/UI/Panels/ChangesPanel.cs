@@ -80,20 +80,15 @@ namespace UnityGit.UI
             var listCard = PanelParts.ListCard(null, _list);
             listCard.Insert(0, header);
 
-            // The list on top, the preview of the selected file below, a divider between them to drag (spec §5.1).
+            // The list on the left, the preview of the selected file on the right, a divider between them to drag.
             _preview = new ChangePreviewView();
-            var split = new TwoPaneSplitView(1, PreviewHeight, TwoPaneSplitViewOrientation.Vertical)
-            {
-                name = UiNames.ChangesSplit,
-                viewDataKey = UiNames.ChangesSplit,
-            };
-            split.AddToClassList("unitygit-changes-split");
-            split.Add(listCard);
-            split.Add(_preview);
-            Add(split);
+            Add(PanelParts.SideBySide(UiNames.ChangesSplit, listCard, _preview));
 
+            // The message box and the Commit button on one row, under both.
             var commitCard = EditorUiElements.Card();
             commitCard.AddToClassList("unitygit-commit-card");
+            var commitRow = new VisualElement();
+            commitRow.AddToClassList("unitygit-commit-row");
             _message = new TextField { name = UiNames.CommitMessage, multiline = true };
             _message.SetValueWithoutNotify(UnityEditor.SessionState.GetString(_messageKey, string.Empty));
             _message.AddToClassList("unitygit-commit-message");
@@ -102,21 +97,16 @@ namespace UnityGit.UI
                 SaveMessage(e.newValue);
                 UpdateSubmit();
             });
-            commitCard.Add(_message);
+            commitRow.Add(_message);
 
             _submit = new Button(() => _ = SubmitCommitAsync()) { name = UiNames.CommitSubmit, text = "Commit" };
             _submit.AddToClassList(EditorUiClasses.ButtonPrimary);
             GitIcons.Apply(_submit, GitIcon.Commit);
-            var actions = new VisualElement();
-            actions.AddToClassList("unitygit-commit-actions");
-            actions.Add(_submit);
-            commitCard.Add(actions);
+            commitRow.Add(_submit);
+            commitCard.Add(commitRow);
             Add(commitCard);
             Render();
         }
-
-        /// <summary>The preview pane's starting height.</summary>
-        internal const float PreviewHeight = 220f;
 
         /// <summary>The preview of the selected file.</summary>
         internal ChangePreviewView Preview => _preview;

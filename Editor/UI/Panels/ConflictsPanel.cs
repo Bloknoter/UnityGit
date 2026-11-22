@@ -99,7 +99,6 @@ namespace UnityGit.UI
             _list.View.selectedIndicesChanged += _ => OnFileClicked();
             var listCard = _list.InCard(null);
             listCard.AddToClassList("unitygit-conflicts-files-card");
-            Add(listCard);
 
             _fileCard = EditorUiElements.Card();
             _fileCard.AddToClassList(PanelClasses.Fill);
@@ -144,7 +143,8 @@ namespace UnityGit.UI
             _fileCard.Add(_wholeFile);
             _fileCard.Add(_places);
             _fileCard.Add(actions);
-            Add(_fileCard);
+            // The conflicted files on the left, the selected file's places on the right, a divider between them to drag.
+            Add(PanelParts.SideBySide(UiNames.ConflictsSplit, listCard, _fileCard));
             Render();
         }
 

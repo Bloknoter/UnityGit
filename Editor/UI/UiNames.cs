@@ -50,6 +50,7 @@ namespace UnityGit.UI
         public const string ConflictsAbort = "unitygit-conflicts-abort";
         public const string ConflictsFiles = "unitygit-conflicts-files";
         public const string ConflictFileTitle = "unitygit-conflict-file-title";
+        public const string ConflictsSplit = "unitygit-conflicts-split";
         public const string ConflictFileType = "unitygit-conflict-file-type";
         public const string ConflictFileNote = "unitygit-conflict-file-note";
         public const string ConflictSceneWarning = "unitygit-conflict-scene-warning";

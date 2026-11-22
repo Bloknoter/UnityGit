@@ -435,10 +435,32 @@ namespace UnityGit.Tests
 
             var split = p.Q<TwoPaneSplitView>(UiNames.ChangesSplit);
             Assert.That(split, Is.Not.Null);
+            Assert.That(split.orientation, Is.EqualTo(TwoPaneSplitViewOrientation.Horizontal), "the preview is beside the list");
+            Assert.That(split.fixedPaneIndex, Is.EqualTo(0), "the list keeps its width; the preview takes the rest");
             var panes = split.Children().ToList();
             Assert.That(panes, Has.Count.EqualTo(2));
             Assert.That(panes[0].Q<ListView>(UiNames.ChangesList), Is.Not.Null);
             Assert.That(panes[1], Is.SameAs(p.Preview));
+        }
+
+        [Test]
+        public async Task Layout_CommitMessageBesideButton()
+        {
+            var (repo, s) = await RepoAsync();
+            GitSandbox.WriteFile(repo, "a.txt", "a\n");
+            await s.RefreshAsync();
+            var v = new GitWindowView(s);
+            using (var window = UnityGitTestWindow.Open(v))
+            {
+                v.SelectTab(WindowTab.Changes);
+                window.ResolveStylesAndLayout();
+
+                var message = v.Q<TextField>(UiNames.CommitMessage).worldBound;
+                var submit = v.Q<Button>(UiNames.CommitSubmit).worldBound;
+                Assert.That(submit.xMin, Is.GreaterThanOrEqualTo(message.xMax), "the button is right of the message box");
+                Assert.That(submit.yMin, Is.LessThan(message.yMax), "on the same row");
+                Assert.That(submit.yMax, Is.GreaterThan(message.yMin), "on the same row");
+            }
         }
     }
 }

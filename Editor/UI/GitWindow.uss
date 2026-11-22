@@ -399,16 +399,24 @@
     -unity-text-align: middle-right;
 }
 
-/* Changes: the list and the preview share a split view (ChangesPanel.PreviewHeight is the preview's start height). */
+/* Changes and Conflicts: the file list on the left and the selected file on the right, a divider between them to drag
+   (PanelParts.SideBySide; PanelParts.SplitListWidth is the list's start width). The split view sets the panes' width and
+   flex inline; these rules give the panes a floor and a gap. */
 
-.unitygit-window .unitygit-changes-split {
+.unitygit-window .unitygit-split {
     flex-grow: 1;
     flex-shrink: 1;
-    min-height: 150px;
+    min-height: 120px;
 }
 
-.unitygit-window .unitygit-changes-split .unity-two-pane-split-view__content-container > * {
-    min-height: 60px;
+.unitygit-window .ed-card.unitygit-split-list {
+    min-width: 160px;
+    margin-right: var(--ed-space-1);
+}
+
+.unitygit-window .ed-card.unitygit-split-detail {
+    min-width: 200px;
+    margin-left: var(--ed-space-1);
 }
 
 .unitygit-window .unitygit-preview-card {
@@ -562,32 +570,43 @@
     padding-bottom: 1px;
 }
 
-/* Changes: the commit card */
+/* Changes: the commit card, one row: the message box takes the width, the Commit button sits at its right, bottom-aligned. */
+
+.unitygit-window .unitygit-commit-card > .ed-card__content {
+    padding-top: var(--ed-space-2);
+    padding-bottom: var(--ed-space-2);
+}
+
+.unitygit-commit-row {
+    flex-direction: row;
+    align-items: flex-end;
+}
 
 .unitygit-window .unitygit-commit-message {
-    min-height: 54px;
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-height: 40px;
     margin-left: 0;
-    margin-right: 0;
+    margin-right: var(--ed-space-2);
     margin-top: 0;
-    margin-bottom: var(--ed-space-2);
+    margin-bottom: 0;
 }
 
 .unitygit-commit-message > .unity-base-text-field__input {
     white-space: normal;
 }
 
-.unitygit-commit-actions {
-    flex-direction: row;
-    justify-content: flex-end;
-}
-
-.unitygit-window .unitygit-commit-actions > .unity-button {
+.unitygit-window .unitygit-commit-row > .unity-button {
+    flex-shrink: 0;
     min-width: 96px;
+    margin-left: 0;
     margin-right: 0;
+    margin-top: 0;
+    margin-bottom: 0;
 }
 
-/* Conflicts: a header card, the file list (a short card of fixed height) and the selected file's card, which fills the
-   rest. The file's places sit in a dark, code-like scroll area: unchanged context lines, then each place as a block whose
+/* Conflicts: a header card, then the file list on the left and the selected file's card on the right (see the split
+   rules above). The file's places sit in a dark, code-like scroll area: unchanged context lines, then each place as a block whose
    left edge says whether it has a pick (warning: not chosen; success: chosen). The selected place is outlined in the
    accent and shows the two sides and the pick buttons. These rules come last so they win ties with the panel rules. */
 
@@ -627,13 +646,6 @@
     padding-left: 0;
     padding-right: 0;
     margin-top: var(--ed-space-1);
-}
-
-.unitygit-window .ed-card.unitygit-conflicts-files-card {
-    flex-grow: 0;
-    flex-shrink: 0;
-    height: 122px;
-    min-height: 0;
 }
 
 .unitygit-conflicts-path {
