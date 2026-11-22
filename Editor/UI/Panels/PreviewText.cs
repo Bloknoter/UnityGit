@@ -1,4 +1,5 @@
 #nullable enable
+using System;
 using System.Globalization;
 
 namespace UnityGit.UI
@@ -47,6 +48,19 @@ namespace UnityGit.UI
                 default: return $"+{PanelParts.Count(v.AddedCount)} −{PanelParts.Count(v.RemovedCount)}";
             }
         }
+
+        /// <summary>An audio clip's length as "m:ss.f".</summary>
+        public static string Length(float seconds)
+        {
+            var tenths = (int)Math.Floor(Math.Max(0f, seconds) * 10 + 0.0001);
+            var minutes = tenths / 600;
+            var rest = tenths % 600;
+            return $"{PanelParts.Count(minutes)}:{(rest / 10).ToString("00", CultureInfo.InvariantCulture)}.{PanelParts.Count(rest % 10)}";
+        }
+
+        /// <summary>"3 × 2 · 1.2 KB": an image's size in pixels and on disk.</summary>
+        public static string ImageSummary(int width, int height, long? bytes)
+            => $"{PanelParts.Count(width)} × {PanelParts.Count(height)}" + (bytes is long size ? " · " + Size(size) : string.Empty);
 
         /// <summary>The path, or "old → new" for a rename.</summary>
         public static string Title(FileDiffView v) => v.OldPath != null ? v.OldPath + " → " + v.Path : v.Path;

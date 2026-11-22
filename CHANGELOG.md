@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.2.0] - 2026-11-22
+
+### Added
+
+- Change preview under the Changes list, for the one selected file: a diff for text files (red `-`, green `+`, line numbers), the content of new files, the picture of images, Play/Stop for audio, and sizes for binary and LFS files. An asset's `.meta` changes follow the asset.
+- A divider between the list and the preview to resize them.
+
+### Changed
+
+- Requires FlexGit 2.2.0.
+
 ## [1.1.0] - 2026-11-20
 
 ### Added

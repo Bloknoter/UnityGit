@@ -13,7 +13,7 @@ Add both lines to your project's `Packages/manifest.json`. FlexGit must come fir
 
 ```json
 "com.bloknoter.flexgit": "https://github.com/Bloknoter/FlexGit.git#upm/v2.2.0",
-"com.bloknoter.unitygit": "https://github.com/Bloknoter/UnityGit.git#v1.1.0"
+"com.bloknoter.unitygit": "https://github.com/Bloknoter/UnityGit.git#v1.2.0"
 ```
 
 Or do the same in Package Manager with **Add package from git URL**: add the FlexGit URL first, then the UnityGit URL.
@@ -27,7 +27,7 @@ Open the window from **Tools → Git → UnityGit**. If the project is not in a 
 The window has an action toolbar (branch dropdown, Commit, Fetch, Pull, Push, Refresh, Cancel while an action can be cancelled), a bar showing the last outcome, and a left navigation with these panels:
 
 - **Overview**: branch, upstream, ahead/behind, repository state, HEAD, your git identity, remotes and LFS status.
-- **Changes**: the files to commit, with a message box and a Commit button.
+- **Changes**: the files to commit, a preview of the selected file, a message box and a Commit button. See **Change preview** below.
 - **Branches**: local and remote branches; double-click to switch.
 - **History**: recent commits on the current branch.
 - **Authors**: names, emails and commit counts.
@@ -46,6 +46,19 @@ Action rules:
 - **During a merge**, every row is locked ticked and goes into the merge commit, including untracked and unrelated files. A `git commit` in a terminal would leave those out.
 - **Play Mode** disables Init, Pull, Switch and all conflict actions. Commit, Push and Fetch stay available.
 - UnityGit discards local changes only where you confirm it: **Abort** (merge or rebase) and **Start over** ask first. Using a side of a conflicted file replaces that file with the chosen version.
+
+## Change preview
+
+Select one file in Changes to see what changed in it since the last commit (staged and unstaged together, which is what Commit takes). The preview sits under the list; drag the divider between them to resize it. It only reads: selecting a file never changes what is ticked.
+
+- **Text files**: removed lines in red with `-`, added lines in green with `+`, three unchanged lines around each change, and the old and new line numbers. The header shows the path and `+added −removed`.
+- **New files**: the content with line numbers, no diff. **Deleted files**: the old content, every line red.
+- **Images** (anything Unity imports as a texture, plus PNG and JPG outside the project): the current picture, scaled to fit, with its size in pixels.
+- **Audio** (anything Unity imports as an audio clip): Play/Stop and the clip's length. Playback uses Unity's internal audio preview; if a Unity version removes it, Play is disabled.
+- **Other binary files**: their sizes. **Git LFS files**: their real sizes.
+- An asset with its `.meta` shows the asset first, then the `.meta`'s changes.
+- Two or more selected files show "X files selected". A conflicted file points to the Conflicts tab.
+- To keep the editor responsive, a preview shows at most 1,000 lines and cuts lines longer than 1,000 characters. A new file over 4 MB is only read in part.
 
 ## Conflicts
 
@@ -69,7 +82,7 @@ Unity 6000.4 has no API for choosing an element's default visibility, so all fiv
 
 ## Limitations
 
-- No diff viewer or history graph.
+- The change preview is read-only and compares with the last commit only: no side-by-side view, no staging or reverting single lines, no diffs of past commits. No history graph.
 - No Unity-aware scene or prefab merging, no custom text for a conflict place, and no continue or abort for a cherry-pick or revert.
 - Stash, tag, remote and LFS-lock actions are not available; they are shown as information only.
 - No clone, no adding remotes and no credential UI (Git Credential Manager handles sign-in).

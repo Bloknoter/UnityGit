@@ -6,6 +6,8 @@ using System.Text;
 using System.Threading.Tasks;
 using FlexGit;
 using NUnit.Framework;
+using UnityEditor;
+using UnityEngine;
 using UnityEngine.UIElements;
 using UnityGit.UI;
 
@@ -15,6 +17,7 @@ namespace UnityGit.Tests
     public class ChangePreviewTests
     {
         const string RowClass = "unitygit-diff-row";
+        const string AssetFolder = "Assets/UnityGitPreviewTestTemp";
 
         GitSandbox _sb = null!;
 
@@ -24,6 +27,45 @@ namespace UnityGit.Tests
         {
             _sb.Dispose();
             GitLocator.ClearCache();
+            if (AssetDatabase.IsValidFolder(AssetFolder)) AssetDatabase.DeleteAsset(AssetFolder);
+        }
+
+        static byte[] Png(int width, int height)
+        {
+            var texture = new Texture2D(width, height);
+            try
+            {
+                return texture.EncodeToPNG();
+            }
+            finally
+            {
+                Object.DestroyImmediate(texture);
+            }
+        }
+
+        // 0.1 s of 8-bit mono PCM at 8 kHz.
+        static byte[] Wav()
+        {
+            const int samples = 800;
+            var data = new List<byte>();
+            void Text(string t) => data.AddRange(Encoding.ASCII.GetBytes(t));
+            void Int(int v) => data.AddRange(System.BitConverter.GetBytes(v));
+            void Short(short v) => data.AddRange(System.BitConverter.GetBytes(v));
+            Text("RIFF"); Int(36 + samples); Text("WAVE");
+            Text("fmt "); Int(16); Short(1); Short(1); Int(8000); Int(8000); Short(1); Short(8);
+            Text("data"); Int(samples);
+            for (var i = 0; i < samples; i++) data.Add((byte)(128 + 60 * System.Math.Sin(i * 0.3)));
+            return data.ToArray();
+        }
+
+        // Writes the file into a temporary folder of the host project and imports it. Returns its asset path.
+        static string ImportAsset(string name, byte[] content)
+        {
+            if (!AssetDatabase.IsValidFolder(AssetFolder)) AssetDatabase.CreateFolder("Assets", "UnityGitPreviewTestTemp");
+            var assetPath = AssetFolder + "/" + name;
+            File.WriteAllBytes(Path.GetFullPath(assetPath), content);
+            AssetDatabase.ImportAsset(assetPath, ImportAssetOptions.ForceSynchronousImport);
+            return assetPath;
         }
 
         // A repo with one commit of base.txt, then whatever the test changes, and a session that has seen it.
@@ -258,6 +300,104 @@ namespace UnityGit.Tests
             Assert.That(FileRows(p).Select(RowText), Is.EqualTo(new[] { "a", "b" }));
             await p.PreviewLoad;
             Assert.That(FileRows(p).Select(RowText), Is.EqualTo(new[] { "a", "c" }));
+        }
+
+        [Test]
+        public async Task Media_PngOutsideAssetDatabase_IsImage()
+        {
+            var (repo, _) = await RepoAsync();
+            var path = Path.Combine(repo.WorkingDirectory, "pic.png");
+            File.WriteAllBytes(path, Png(3, 2));
+
+            var (kind, assetPath) = PreviewMedia.Detect(path);
+            var texture = PreviewMedia.LoadImage(path, assetPath, out var width, out var height, out var owned);
+            try
+            {
+                Assert.That(kind, Is.EqualTo(MediaKind.Image));
+                Assert.That(assetPath, Is.Null);
+                Assert.That(texture, Is.Not.Null);
+                Assert.That((width, height), Is.EqualTo((3, 2)));
+                Assert.That(owned, Is.True);
+            }
+            finally
+            {
+                if (owned) Object.DestroyImmediate(texture);
+            }
+        }
+
+        [Test]
+        public async Task Media_TextFile_IsNone()
+        {
+            var (repo, _) = await RepoAsync();
+            var path = Path.Combine(repo.WorkingDirectory, "notes.txt");
+            File.WriteAllText(path, "text");
+
+            Assert.That(PreviewMedia.Detect(path).Kind, Is.EqualTo(MediaKind.None));
+        }
+
+        [Test]
+        public void Media_ImportedTexture_IsImage()
+        {
+            var assetPath = ImportAsset("pic.png", Png(4, 3));
+
+            var (kind, detected) = PreviewMedia.Detect(Path.GetFullPath(assetPath));
+            var texture = PreviewMedia.LoadImage(Path.GetFullPath(assetPath), detected, out var width, out var height, out var owned);
+
+            Assert.That(kind, Is.EqualTo(MediaKind.Image));
+            Assert.That(detected, Is.EqualTo(assetPath));
+            Assert.That(texture, Is.Not.Null);
+            Assert.That((width, height), Is.EqualTo((4, 3)));
+            Assert.That(owned, Is.False);
+        }
+
+        [Test]
+        public void Media_ImportedAudio_IsAudio()
+        {
+            var assetPath = ImportAsset("beep.wav", Wav());
+
+            Assert.That(PreviewMedia.Detect(Path.GetFullPath(assetPath)), Is.EqualTo((MediaKind.Audio, assetPath)));
+        }
+
+        [Test]
+        public void Audio_UtilResolves()
+        {
+            Assert.That(AudioPreview.IsAvailable, Is.True, "UnityEditor.AudioUtil has PlayPreviewClip, StopAllPreviewClips and IsPreviewClipPlaying");
+        }
+
+        [Test]
+        public void Texts_AudioLength()
+        {
+            Assert.That(PreviewText.Length(0.1f), Is.EqualTo("0:00.1"));
+            Assert.That(PreviewText.Length(83.25f), Is.EqualTo("1:23.2"));
+        }
+
+        [Test]
+        public async Task Preview_Image_ShowsPicture()
+        {
+            var (repo, s) = await RepoAsync();
+            File.WriteAllBytes(Path.Combine(repo.WorkingDirectory, "pic.png"), Png(3, 2));
+
+            var p = await PanelAsync(s, "pic.png");
+
+            Assert.That(p.Q<Image>(UiNames.PreviewImage)?.image, Is.Not.Null);
+            Assert.That(Summary(p), Does.StartWith("3 × 2 · "));
+            Assert.That(p.Preview.NoteText, Is.Null);
+        }
+
+        [Test]
+        public async Task Preview_DeletedImage_SaysDeleted()
+        {
+            var (repo, s) = await RepoAsync();
+            var path = Path.Combine(repo.WorkingDirectory, "pic.png");
+            File.WriteAllBytes(path, Png(3, 2));
+            await repo.Index.StageAsync(new[] { "pic.png" });
+            await repo.CommitAsync("pic");
+            File.Delete(path);
+
+            var p = await PanelAsync(s, "pic.png");
+
+            Assert.That(p.Preview.NoteText, Does.StartWith("Deleted · "));
+            Assert.That(p.Q<Image>(UiNames.PreviewImage), Is.Null);
         }
 
         [Test]

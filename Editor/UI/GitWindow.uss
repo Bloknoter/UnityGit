@@ -475,6 +475,40 @@
     padding-bottom: var(--ed-space-1);
 }
 
+/* An image or audio file: the picture (scaled to fit) or the player fills the card; a .meta section goes under it. */
+.unitygit-preview-media {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-height: 60px;
+    padding-left: var(--ed-space-2);
+    padding-right: var(--ed-space-2);
+    padding-top: var(--ed-space-2);
+    padding-bottom: var(--ed-space-2);
+    background-color: var(--ed-input-bg);
+}
+
+.unitygit-preview-image {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-height: 0;
+}
+
+.unitygit-preview-audio {
+    flex-direction: row;
+    align-items: center;
+}
+
+.unitygit-window .unitygit-preview-audio > .unity-button {
+    min-width: 64px;
+    margin-left: 0;
+    margin-right: var(--ed-space-2);
+}
+
+.unitygit-preview-body.unitygit-preview-body--under-media {
+    flex-grow: 0;
+    max-height: 45%;
+}
+
 /* A diff row: old and new line numbers, the marker, the text. Removed rows in the error tint, added in the success tint. */
 .unitygit-diff-row {
     flex-direction: row;

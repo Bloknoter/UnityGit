@@ -1,5 +1,6 @@
 #nullable enable
 using System;
+using UnityEngine;
 using UnityEngine.UIElements;
 using UnityGit.UI.Theme;
 
@@ -7,7 +8,7 @@ namespace UnityGit.UI
 {
     /// <summary>
     /// The preview card under the Changes list (spec §5.1, §5.2): a header with the path and a summary, a note, and the
-    /// file's rows — a diff, or a new file's plain content — then its .meta's rows. <see cref="ChangesPanel"/> decides
+    /// file's rows — a diff, or a new file's plain content — or its picture or audio player, then its .meta's rows. <see cref="ChangesPanel"/> decides
     /// what to show and calls <see cref="ShowNote"/>, <see cref="ShowLoading"/> or <see cref="Show"/>.
     /// </summary>
     internal sealed class ChangePreviewView : EditorUiCard
@@ -20,7 +21,15 @@ namespace UnityGit.UI
         readonly Label _note;
         readonly ScrollView _body;
         readonly VisualElement _file;
+        readonly VisualElement _media;
         bool _noteShown;
+
+        // The image or audio shown, if any. A texture decoded here (not an asset) is destroyed when it's replaced.
+        Texture? _ownedTexture;
+        AudioClip? _clip;
+        Button? _play;
+        bool _playing;
+        IVisualElementScheduledItem? _poll;
 
         public ChangePreviewView() : base(PreviewText.Heading)
         {
@@ -39,12 +48,19 @@ namespace UnityGit.UI
             _note.name = UiNames.PreviewNote;
             Add(_note);
 
+            _media = new VisualElement();
+            _media.AddToClassList("unitygit-preview-media");
+            PanelParts.SetDisplayed(_media, false);
+            Add(_media);
+
             _body = new ScrollView(ScrollViewMode.Vertical) { name = UiNames.PreviewBody };
             _body.AddToClassList("unitygit-preview-body");
             _file = new VisualElement { name = UiNames.PreviewFile };
             _file.AddToClassList("unitygit-preview-section");
             _body.Add(_file);
             Add(_body);
+            // Closing the window or switching tabs stops the sound; the picture stays for when the tab comes back.
+            RegisterCallback<DetachFromPanelEvent>(_ => StopAudio());
             ShowNote(PreviewText.SelectFile);
         }
 
@@ -72,8 +88,12 @@ namespace UnityGit.UI
             var file = preview.File;
             SetHeader(PreviewText.Title(file), PreviewText.Summary(file));
             ClearBody();
-            SetNote(PreviewText.Note(file));
-            if (NoteText == null) AddRows(_file, file);
+            if (file.Change != DiffChange.Deleted && ShowMedia(file)) SetNote(null);
+            else
+            {
+                SetNote(PreviewText.Note(file));
+                if (NoteText == null) AddRows(_file, file);
+            }
 
             if (preview.Meta is FileDiffView meta)
             {
@@ -92,10 +112,92 @@ namespace UnityGit.UI
             }
         }
 
+        // An image or audio clip Unity recognises replaces the rows (spec §5.2): the current file, no diff.
+        bool ShowMedia(FileDiffView file)
+        {
+            var (kind, assetPath) = PreviewMedia.Detect(file.FullPath);
+            if (kind == MediaKind.Image)
+            {
+                var texture = PreviewMedia.LoadImage(file.FullPath, assetPath, out var width, out var height, out var owned);
+                if (texture == null) return false;
+                if (owned) _ownedTexture = texture;
+                var image = new Image { name = UiNames.PreviewImage, image = texture, scaleMode = ScaleMode.ScaleToFit };
+                image.AddToClassList("unitygit-preview-image");
+                _media.Add(image);
+                SetSummary(PreviewText.ImageSummary(width, height, file.NewSize));
+            }
+            else if (kind == MediaKind.Audio && assetPath != null && PreviewMedia.LoadAudio(assetPath) is AudioClip clip)
+            {
+                _clip = clip;
+                var player = new VisualElement();
+                player.AddToClassList("unitygit-preview-audio");
+                _play = new Button(TogglePlay) { name = UiNames.PreviewAudio, text = "Play" };
+                _play.SetEnabled(AudioPreview.IsAvailable);
+                _play.tooltip = AudioPreview.IsAvailable ? string.Empty : AudioPreview.Unavailable;
+                player.Add(_play);
+                player.Add(PanelParts.Text(PreviewText.Length(clip.length), EditorUiClasses.Mono, "unitygit-preview-audio-length"));
+                _media.Add(player);
+                SetSummary(PreviewText.Length(clip.length) + (file.NewSize is long size ? " · " + PreviewText.Size(size) : string.Empty));
+            }
+            else return false;
+
+            PanelParts.SetDisplayed(_media, true);
+            _body.AddToClassList("unitygit-preview-body--under-media");
+            return true;
+        }
+
+        void TogglePlay()
+        {
+            if (_playing)
+            {
+                StopAudio();
+                return;
+            }
+            if (_clip == null || _play == null) return;
+            AudioPreview.Play(_clip);
+            _playing = true;
+            _play.text = "Stop";
+            _poll ??= schedule.Execute(() =>
+            {
+                if (_playing && !AudioPreview.IsPlaying) SetStopped(); // the clip ended
+            }).Every(100);
+            _poll.Resume();
+        }
+
+        void StopAudio()
+        {
+            if (_playing) AudioPreview.Stop();
+            SetStopped();
+        }
+
+        void SetStopped()
+        {
+            _playing = false;
+            if (_play != null) _play.text = "Play";
+            _poll?.Pause();
+        }
+
+        void ReleaseMedia()
+        {
+            StopAudio();
+            _clip = null;
+            _play = null;
+            if (_ownedTexture != null) UnityEngine.Object.DestroyImmediate(_ownedTexture);
+            _ownedTexture = null;
+            _media.Clear();
+            PanelParts.SetDisplayed(_media, false);
+            _body.RemoveFromClassList("unitygit-preview-body--under-media");
+        }
+
         void SetHeader(string title, string summary)
         {
             Title = title;
             _title.tooltip = title;
+            SetSummary(summary);
+        }
+
+        void SetSummary(string summary)
+        {
             _summary.text = summary;
             PanelParts.SetDisplayed(_summary, summary.Length > 0);
         }
@@ -109,6 +211,7 @@ namespace UnityGit.UI
 
         void ClearBody()
         {
+            ReleaseMedia();
             _file.Clear();
             _body.Q(UiNames.PreviewMeta)?.RemoveFromHierarchy();
             _body.scrollOffset = UnityEngine.Vector2.zero;
