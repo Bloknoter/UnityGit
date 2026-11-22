@@ -99,6 +99,14 @@ namespace UnityGit
                     if (!IsMergeOrRebase(s.Operation)) return $"Abort the {OperationNoun(s.Operation)} outside UnityGit";
                     return null;
 
+                case GitAction.Revert:
+                    if (isPlayMode) return NotInPlayMode;
+                    // During a merge every row is locked in, so the merge commit can't drop an incoming change: reverting
+                    // one would. Rebase, cherry-pick, revert and bisect put their own changes in the working tree too.
+                    if (s.Operation != RepoOperation.None) return $"Finish or abort the {OperationNoun(s.Operation)} first";
+                    if (s.Changes.Count == 0) return "Nothing to revert";
+                    return null;
+
                 case GitAction.SetUpLfs:
                     if (!s.Lfs.UsedByRepo) return "This repository doesn't use LFS";
                     if (!s.Lfs.GitLfsAvailable) return "git-lfs isn't installed — install it from https://git-lfs.com";

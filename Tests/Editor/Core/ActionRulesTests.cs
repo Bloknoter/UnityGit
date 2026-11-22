@@ -89,5 +89,13 @@ namespace UnityGit.Tests
             Assert.That(Why(GitAction.SetUpLfs, Ready(s => s.Lfs = new LfsInfo { UsedByRepo = true, GitLfsAvailable = true, HooksInstalled = true })), Is.EqualTo("LFS is already set up"));
             Assert.That(Why(GitAction.SetUpLfs, Ready(s => s.Lfs = new LfsInfo { UsedByRepo = true, GitLfsAvailable = true })), Is.Null);
         }
+        [Test] public void Revert_WhenReady_Allowed() => Assert.That(Why(GitAction.Revert, Ready()), Is.Null);
+        [Test] public void Revert_InPlayMode_Refused() => Assert.That(Why(GitAction.Revert, Ready(), play: true), Is.EqualTo("Not available in Play Mode"));
+        [Test] public void Revert_DuringOperation_Refused()
+            => Assert.That(new[] { RepoOperation.Merging, RepoOperation.Rebasing, RepoOperation.CherryPicking }
+                    .Select(op => Why(GitAction.Revert, Ready(s => s.Operation = op))),
+                Is.EqualTo(new[] { "Finish or abort the merge first", "Finish or abort the rebase first", "Finish or abort the cherry-pick first" }));
+        [Test] public void Revert_NoChanges_Refused()
+            => Assert.That(Why(GitAction.Revert, Ready(s => s.Changes = Array.Empty<ChangeItem>())), Is.EqualTo("Nothing to revert"));
     }
 }
