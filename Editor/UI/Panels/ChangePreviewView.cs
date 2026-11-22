@@ -26,6 +26,8 @@ namespace UnityGit.UI
 
         // The image or audio shown, if any. A texture decoded here (not an asset) is destroyed when it's replaced.
         Texture? _ownedTexture;
+        Image? _image;
+        float _imageAspect; // the file's width over height, not the imported texture's
         AudioClip? _clip;
         Button? _play;
         bool _playing;
@@ -51,6 +53,7 @@ namespace UnityGit.UI
             _media = new VisualElement();
             _media.AddToClassList("unitygit-preview-media");
             PanelParts.SetDisplayed(_media, false);
+            _media.RegisterCallback<GeometryChangedEvent>(_ => FitImage());
             Add(_media);
 
             _body = new ScrollView(ScrollViewMode.Vertical) { name = UiNames.PreviewBody };
@@ -121,9 +124,14 @@ namespace UnityGit.UI
                 var texture = PreviewMedia.LoadImage(file.FullPath, assetPath, out var width, out var height, out var owned);
                 if (texture == null) return false;
                 if (owned) _ownedTexture = texture;
-                var image = new Image { name = UiNames.PreviewImage, image = texture, scaleMode = ScaleMode.ScaleToFit };
-                image.AddToClassList("unitygit-preview-image");
-                _media.Add(image);
+                // Unity may import the file at other proportions (a non-power-of-two image scaled to 256×128), so the element
+                // takes the file's own proportions and the texture is stretched to fill it.
+                _image = new Image { name = UiNames.PreviewImage, image = texture, scaleMode = ScaleMode.StretchToFill };
+                _image.AddToClassList("unitygit-preview-image");
+                _imageAspect = width > 0 && height > 0 ? (float)width / height : (float)texture.width / Math.Max(1, texture.height);
+                _media.Add(_image);
+                _media.AddToClassList("unitygit-preview-media--image");
+                FitImage(); // when the area is already laid out; otherwise its first layout calls it
                 SetSummary(PreviewText.ImageSummary(width, height, file.NewSize));
             }
             else if (kind == MediaKind.Audio && assetPath != null && PreviewMedia.LoadAudio(assetPath) is AudioClip clip)
@@ -144,6 +152,17 @@ namespace UnityGit.UI
             PanelParts.SetDisplayed(_media, true);
             _body.AddToClassList("unitygit-preview-body--under-media");
             return true;
+        }
+
+        // The largest size with the file's proportions that fits the area; the area centres it.
+        void FitImage()
+        {
+            if (_image == null || _imageAspect <= 0) return;
+            var area = _media.contentRect;
+            if (float.IsNaN(area.width) || float.IsNaN(area.height) || area.width <= 0 || area.height <= 0) return;
+            var width = Math.Min(area.width, area.height * _imageAspect);
+            _image.style.width = width;
+            _image.style.height = width / _imageAspect;
         }
 
         void TogglePlay()
@@ -184,6 +203,8 @@ namespace UnityGit.UI
             _play = null;
             if (_ownedTexture != null) UnityEngine.Object.DestroyImmediate(_ownedTexture);
             _ownedTexture = null;
+            _image = null;
+            _media.RemoveFromClassList("unitygit-preview-media--image");
             _media.Clear();
             PanelParts.SetDisplayed(_media, false);
             _body.RemoveFromClassList("unitygit-preview-body--under-media");

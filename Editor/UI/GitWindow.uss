@@ -500,10 +500,15 @@
     background-color: var(--ed-input-bg);
 }
 
+/* The picture: ChangePreviewView.FitImage sizes it to the file's proportions; the area centres it. */
+.unitygit-preview-media--image {
+    align-items: center;
+    justify-content: center;
+}
+
 .unitygit-preview-image {
-    flex-grow: 1;
-    flex-shrink: 1;
-    min-height: 0;
+    flex-grow: 0;
+    flex-shrink: 0;
 }
 
 .unitygit-preview-audio {

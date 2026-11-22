@@ -411,6 +411,37 @@ namespace UnityGit.Tests
         }
 
         [Test]
+        public void Preview_ImportedImage_KeepsSourceAspect()
+        {
+            // Unity's default import scales a non-power-of-two image to power-of-two sizes (300×100 → 256×128): the picture
+            // must still show at the file's own 3:1.
+            var assetPath = ImportAsset("wide.png", Png(300, 100));
+            var texture = AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
+            Assert.That(texture.width / (float)texture.height, Is.Not.EqualTo(3f), "setup: the imported texture isn't 3:1 (256×128)");
+            var view = new ChangePreviewView();
+            var host = new VisualElement();
+            host.AddToClassList("unitygit-window");
+            UnityGit.UI.Theme.EditorUiTheme.Apply(host);
+            host.styleSheets.Add(AssetDatabase.LoadAssetAtPath<StyleSheet>("Packages/com.bloknoter.unitygit/Editor/UI/GitWindow.uss"));
+            host.style.width = 600;
+            host.style.height = 400;
+            host.Add(view);
+            using (var window = UnityGitTestWindow.Open(host))
+            {
+                view.Show(new ChangePreview
+                {
+                    File = new FileDiffView { Path = "wide.png", FullPath = Path.GetFullPath(assetPath), Change = DiffChange.Added, IsBinary = true, NewSize = 1 },
+                });
+                window.ResolveStylesAndLayout();
+                window.ResolveStylesAndLayout(); // the picture sizes itself once its area is laid out
+
+                var image = view.Q<Image>(UiNames.PreviewImage).worldBound;
+                Assert.That(image.width / image.height, Is.EqualTo(3f).Within(0.05f), "the file's own width to height");
+                Assert.That(image.width, Is.GreaterThan(300f), "it fills the area's width");
+            }
+        }
+
+        [Test]
         public async Task Preview_DeletedImage_SaysDeleted()
         {
             var (repo, s) = await RepoAsync();
