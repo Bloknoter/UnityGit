@@ -19,7 +19,7 @@ namespace UnityGit.UI
 
         public static (MediaKind Kind, string? AssetPath) Detect(string fullPath)
         {
-            var assetPath = AssetPathOf(fullPath);
+            var assetPath = AssetPaths.FromFullPath(fullPath);
             var type = assetPath != null ? AssetDatabase.GetMainAssetTypeAtPath(assetPath) : null;
             if (type != null)
             {
@@ -69,19 +69,6 @@ namespace UnityGit.UI
         }
 
         public static AudioClip? LoadAudio(string assetPath) => AssetDatabase.LoadAssetAtPath<AudioClip>(assetPath);
-
-        // "Assets/..." for a file in the project's Assets, "Packages/<name>/..." for one in a package; null otherwise.
-        static string? AssetPathOf(string fullPath)
-        {
-            var full = Path.GetFullPath(fullPath).Replace('\\', '/');
-            var project = Path.GetFullPath(Path.Combine(Application.dataPath, "..")).Replace('\\', '/').TrimEnd('/') + "/";
-            var relative = full.StartsWith(project, StringComparison.OrdinalIgnoreCase) ? full.Substring(project.Length) : null;
-            if (relative != null && relative.StartsWith("Assets/", StringComparison.Ordinal)) return relative;
-
-            var logical = FileUtil.GetLogicalPath(full);
-            if (logical != null && logical.StartsWith("Packages/", StringComparison.Ordinal)) return logical;
-            return relative != null && relative.StartsWith("Packages/", StringComparison.Ordinal) ? relative : null;
-        }
 
         static bool IsImageImporter(AssetImporter? importer) => importer is TextureImporter || importer is IHVImageFormatImporter;
 

@@ -1,9 +1,9 @@
 {
   "name": "com.bloknoter.unitygit",
   "displayName": "UnityGit",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "unity": "6000.3",
-  "description": "Work with your project's git repository inside the Unity Editor: repo info, commit, push, fetch, pull, branch switching, a preview of each change and conflict resolution, plus optional main-toolbar buttons. Requires FlexGit: first add https://github.com/Bloknoter/FlexGit.git#upm/v2.2.0 to Packages/manifest.json.",
+  "description": "Work with your project's git repository inside the Unity Editor: repo info, commit, push, fetch, pull, branch switching, a preview of each change, reverting changes and conflict resolution, plus optional main-toolbar buttons. Requires FlexGit: first add https://github.com/Bloknoter/FlexGit.git#upm/v2.2.0 to Packages/manifest.json.",
   "keywords": ["git", "vcs", "lfs", "editor", "tools"],
   "author": {
     "name": "Bloknoter",

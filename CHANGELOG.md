@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.0] - 2026-11-23
+
+### Added
+
+- Right-click a file in Changes for **Revert…**, **Show in Explorer** and **Show in Project**. Revert asks first, then puts the selected files (or the clicked one) back as they are in the last commit, with their `.meta`. New files are deleted. It isn't offered during a merge, rebase, cherry-pick, revert or bisect, or in Play Mode, and conflicted files are skipped.
+
 ## [1.2.0] - 2026-11-22
 
 ### Added

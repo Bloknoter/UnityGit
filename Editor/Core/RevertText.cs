@@ -4,8 +4,11 @@ using System.Linq;
 
 namespace UnityGit
 {
-    /// <summary>The words of Revert's confirm dialog, and of the menu item when only conflicted files were picked.</summary>
-    internal static class RevertText
+    /// <summary>
+    /// The words of Revert's confirm dialog, and of the menu item when only conflicted files were picked. Public because
+    /// the UI assembly names <see cref="AllConflicted"/> and doesn't see Core's internals.
+    /// </summary>
+    public static class RevertText
     {
         /// <summary>Why Revert is disabled when every picked row is conflicted.</summary>
         public const string AllConflicted = "Resolve conflicts in the Conflicts tab";

@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,7 +14,8 @@ namespace UnityGit.UI
     /// <summary>
     /// The change list, under a header with a tick-all checkbox and a "{ticked} of {rows} to commit" summary, and the
     /// commit card. Ticks decide what is committed. The list's selection (click, Ctrl+click, Shift+click) only decides
-    /// which rows a checkbox click or Space applies to, and which file the preview under the list shows.
+    /// which rows a checkbox click or Space applies to, which file the preview under the list shows, and which rows the
+    /// right-click menu (Revert, Show in Explorer, Show in Project) acts on.
     /// </summary>
     internal sealed class ChangesPanel : VisualElement, IRenderablePanel
     {
@@ -194,6 +196,83 @@ namespace UnityGit.UI
             Render();
             return outcome;
         }
+
+        /// <summary>What the right-click menu on a row offers, and for which rows.</summary>
+        internal sealed class RowMenuState
+        {
+            public RowMenuState(IReadOnlyList<string> targets, string? revertDisabledReason, string? explorerPath, UnityEngine.Object? projectAsset)
+            {
+                Targets = targets;
+                RevertDisabledReason = revertDisabledReason;
+                ExplorerPath = explorerPath;
+                ProjectAsset = projectAsset;
+            }
+
+            /// <summary>The rows the menu acts on: the selection when the clicked row is part of it, otherwise that row only.</summary>
+            public IReadOnlyList<string> Targets { get; }
+
+            /// <summary>Why Revert is disabled; null when it is enabled.</summary>
+            public string? RevertDisabledReason { get; }
+
+            /// <summary>The first target's full path when it is on disk; null disables Show in Explorer.</summary>
+            public string? ExplorerPath { get; }
+
+            /// <summary>The first target's asset when it is one; null disables Show in Project.</summary>
+            public UnityEngine.Object? ProjectAsset { get; }
+        }
+
+        /// <summary>What the OS file browser item is called, as Unity names it.</summary>
+        internal static string ExplorerLabel => Application.platform == RuntimePlatform.OSXEditor ? "Reveal in Finder" : "Show in Explorer";
+
+        /// <summary>
+        /// The menu for a right-click on this row. Targets follow the checkbox rule (<see cref="ToggleRow"/>), and the selection
+        /// is left as it is. Show in Explorer and Show in Project use the first target.
+        /// </summary>
+        internal RowMenuState GetRowMenuState(string rowPath)
+        {
+            IReadOnlyList<string> targets = _selected.Contains(rowPath) ? SelectedRows : new[] { rowPath };
+
+            var reason = _session.GetAvailability(GitAction.Revert).Reason;
+            if (reason == null && targets.All(t => _byPath.TryGetValue(t, out var row) && row.IsConflicted))
+                reason = RevertText.AllConflicted;
+
+            string? explorerPath = null;
+            var root = _session.Snapshot.RepoRoot;
+            if (root != null)
+            {
+                var full = Path.GetFullPath(Path.Combine(root, targets[0]));
+                if (File.Exists(full) || Directory.Exists(full)) explorerPath = full;
+            }
+            var assetPath = explorerPath != null ? AssetPaths.FromFullPath(explorerPath) : null;
+            var asset = assetPath != null ? UnityEditor.AssetDatabase.LoadMainAssetAtPath(assetPath) : null;
+            return new RowMenuState(targets, reason, explorerPath, asset);
+        }
+
+        internal void PopulateRowMenu(DropdownMenu menu, string rowPath)
+        {
+            var state = GetRowMenuState(rowPath);
+            var reason = state.RevertDisabledReason;
+            // A context menu has no tooltips, so a disabled Revert says why in its name.
+            menu.AppendAction(reason == null ? "Revert…" : $"Revert… ({reason})", action => _ = RevertAsync(state.Targets), MenuStatus(reason == null));
+            menu.AppendSeparator();
+            menu.AppendAction(ExplorerLabel, _ => UnityEditor.EditorUtility.RevealInFinder(state.ExplorerPath), MenuStatus(state.ExplorerPath != null));
+            menu.AppendAction("Show in Project", _ =>
+            {
+                UnityEditor.EditorUtility.FocusProjectWindow();
+                UnityEditor.EditorGUIUtility.PingObject(state.ProjectAsset);
+            }, MenuStatus(state.ProjectAsset != null));
+        }
+
+        /// <summary>Reverts these rows (it asks first), then shows the list as it is now.</summary>
+        internal async Task<ActionOutcome> RevertAsync(IReadOnlyList<string> rows)
+        {
+            var outcome = await _session.RevertAsync(rows);
+            Render();
+            return outcome;
+        }
+
+        static DropdownMenuAction.Status MenuStatus(bool enabled)
+            => enabled ? DropdownMenuAction.Status.Normal : DropdownMenuAction.Status.Disabled;
 
         public void Render()
         {
@@ -450,6 +529,11 @@ namespace UnityGit.UI
                 {
                     if (userData is string path) panel.ToggleRow(path, e.newValue);
                 });
+                // Rows are recycled, so the path is read when the menu opens.
+                this.AddManipulator(new ContextualMenuManipulator(e =>
+                {
+                    if (userData is string path) panel.PopulateRowMenu(e.menu, path);
+                }));
                 Add(Tick);
                 Add(Kind);
                 Add(Path);

@@ -13,7 +13,7 @@ Add both lines to your project's `Packages/manifest.json`. FlexGit must come fir
 
 ```json
 "com.bloknoter.flexgit": "https://github.com/Bloknoter/FlexGit.git#upm/v2.2.0",
-"com.bloknoter.unitygit": "https://github.com/Bloknoter/UnityGit.git#v1.2.0"
+"com.bloknoter.unitygit": "https://github.com/Bloknoter/UnityGit.git#v1.3.0"
 ```
 
 Or do the same in Package Manager with **Add package from git URL**: add the FlexGit URL first, then the UnityGit URL.
@@ -37,6 +37,7 @@ The window has an action toolbar (branch dropdown, Commit, Fetch, Pull, Push, Re
 Action rules:
 
 - **Commit** commits exactly the files you tick in Changes. Ticked files are staged and unticked files are unstaged. An asset and its `.meta` file appear as one row, and ticking it commits both. A header row has a tick-all checkbox and shows how many files are ticked. Click, Ctrl+click and Shift+click select rows; ticking a row that is part of the selection applies to the whole selection, and Space toggles the selected rows. The Commit button is disabled with an empty message or nothing ticked.
+- **Revert** (right-click a file in Changes): puts the selected files back as they are in the last commit, or only the clicked file when it isn't part of the selection. Each asset's `.meta` goes with it. New files are deleted. It asks first and names the files. Unsaved assets are saved and you are asked about modified scenes, as for Pull. Not available during a merge, rebase, cherry-pick, revert or bisect, or in Play Mode. Conflicted files are skipped. The same menu has **Show in Explorer** and **Show in Project**, which use the first selected file.
 - Before Commit, Pull and Switch, unsaved assets are saved and you are asked about modified scenes. If you cancel, or choose **Don't Save**, the action is cancelled and nothing happens. If saving reveals changed files you have not seen, the commit stops and the new files are listed (ticked) so you can review them and commit again.
 - **Push** pushes the current branch and sets the upstream on the first push. A rejected push is shown as an outcome ("someone pushed first — pull, then push"). If the repo uses LFS but LFS hooks are not installed, Push is blocked until you click **Set up LFS**. UnityGit never installs LFS hooks on its own.
 - **Fetch** fetches from the default remote.
@@ -45,7 +46,7 @@ Action rules:
 - **Conflicts** are resolved in the Conflicts tab (see below). Conflicted rows cannot be ticked, and Commit is disabled while any conflict exists. During a rebase it says "Continue or abort the rebase first". During a cherry-pick, revert or bisect the window tells you to finish or abort it outside the tool.
 - **During a merge**, every row is locked ticked and goes into the merge commit, including untracked and unrelated files. A `git commit` in a terminal would leave those out.
 - **Play Mode** disables Init, Pull, Switch and all conflict actions. Commit, Push and Fetch stay available.
-- UnityGit discards local changes only where you confirm it: **Abort** (merge or rebase) and **Start over** ask first. Using a side of a conflicted file replaces that file with the chosen version.
+- UnityGit discards local changes only where you confirm it: **Revert**, **Abort** (merge or rebase) and **Start over** ask first. Using a side of a conflicted file replaces that file with the chosen version.
 
 ## Change preview
 
@@ -90,6 +91,7 @@ Unity 6000.4 has no API for choosing an element's default visibility, so all fiv
 - Commit stages whole files for the ticked rows. Partial staging done outside the tool (for example `git add -p`) is replaced by whole-file staging.
 - Windows is the primary platform. macOS and Linux are untested.
 - Unity versions older than 6000.3 are not supported.
+- Reverting every file of a new folder leaves the empty folder behind, and Unity gives it a new `.meta`.
 
 ## License
 
