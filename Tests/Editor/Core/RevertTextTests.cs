@@ -33,6 +33,14 @@ namespace UnityGit.Tests
                 + string.Join("\n", rows.Take(10).Select(r => r.Path)) + "\n…and 3 more"));
         }
 
+        [Test] public void Message_NeverCommittedMetas_SaysTheyAreDeleted()
+        {
+            Assert.That(RevertText.Message(new[] { Row("a") }, 0, 1),
+                Is.EqualTo(Warning + "\n1 .meta file that was never committed will be deleted, and Unity will give its asset a new GUID."));
+            Assert.That(RevertText.Message(new[] { Row("a"), Row("b") }, 0, 2),
+                Is.EqualTo(Warning + "\n2 .meta files that were never committed will be deleted, and Unity will give their assets new GUIDs.\n\na\nb"));
+        }
+
         [Test] public void Message_SkippedConflicts_SaysSo()
         {
             Assert.That(RevertText.Message(new[] { Row("a") }, 1), Is.EqualTo(Warning + "\n\n1 conflicted file is skipped."));

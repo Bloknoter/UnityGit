@@ -19,14 +19,19 @@ namespace UnityGit
             => targets.Count == 1 ? $"Revert {targets[0].Path}?" : $"Revert {targets.Count} files?";
 
         /// <summary>
-        /// The warning, how many new files are deleted, the paths when there are several (the title names a single one), and
-        /// how many conflicted files are left out.
+        /// The warning, how many new files are deleted, how many never-committed .meta files of tracked assets are deleted
+        /// (<paramref name="newMetas"/>: their assets get new GUIDs, which breaks references to them), the paths when there are
+        /// several (the title names a single one), and how many conflicted files are left out.
         /// </summary>
-        public static string Message(IReadOnlyList<ChangeItem> targets, int conflictedSkipped)
+        public static string Message(IReadOnlyList<ChangeItem> targets, int conflictedSkipped, int newMetas = 0)
         {
             var lines = new List<string> { "Your changes will be lost. This can't be undone." };
             var added = targets.Count(t => t.Kind == ChangeKind.Added || t.Kind == ChangeKind.Untracked);
             if (added > 0) lines.Add(added == 1 ? "1 new file will be deleted." : $"{added} new files will be deleted.");
+            if (newMetas > 0)
+                lines.Add(newMetas == 1
+                    ? "1 .meta file that was never committed will be deleted, and Unity will give its asset a new GUID."
+                    : $"{newMetas} .meta files that were never committed will be deleted, and Unity will give their assets new GUIDs.");
 
             if (targets.Count > 1)
             {

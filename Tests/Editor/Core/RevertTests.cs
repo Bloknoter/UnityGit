@@ -305,6 +305,97 @@ namespace UnityGit.Tests
             Assert.That(_hooks.Calls, Is.Empty);
         }
 
+        // old.txt renamed to new.txt (staged), then a brand-new old.txt written: git lists it as its own untracked row.
+        async Task<GitSession> RenameThenNewFileAtOldPathAsync()
+        {
+            var s = await RepoAsync(("old.txt", "old\n"));
+            Assert.That((await _repo.RunRawAsync("mv", "old.txt", "new.txt")).ExitCode, Is.EqualTo(0), "setup: git mv");
+            await WriteAndRefreshAsync(s, ("old.txt", "brand new\n"));
+            Assert.That(Rows(s), Is.EquivalentTo(new[] { "new.txt", "old.txt" }), "setup: a rename row and an untracked row");
+            return s;
+        }
+
+        [Test] public async Task Revert_RenameWhoseOldPathHasANewFile_RefusedAndNothingDeleted()
+        {
+            var s = await RenameThenNewFileAtOldPathAsync();
+
+            var o = await s.RevertAsync(new[] { "new.txt" });
+
+            AssertOutcome(o, OutcomeKind.Refused, "Select old.txt too — this revert would discard it as well");
+            Assert.That(Read("old.txt"), Is.EqualTo("brand new\n"));
+            Assert.That(Exists("new.txt"), Is.True);
+            Assert.That(_hooks.Calls, Is.Empty);
+        }
+
+        [Test] public async Task Revert_RenameAndNewFileAtOldPath_BothPicked_RestoresHead()
+        {
+            var s = await RenameThenNewFileAtOldPathAsync();
+
+            var o = await s.RevertAsync(new[] { "new.txt", "old.txt" });
+
+            AssertOutcome(o, OutcomeKind.Succeeded, "Reverted 2 files");
+            Assert.That(Read("old.txt"), Is.EqualTo("old\n"));
+            Assert.That(Exists("new.txt"), Is.False);
+            Assert.That(Rows(s), Is.Empty);
+        }
+
+        [Test] public async Task Revert_MergeStartedSinceRefresh_Refused()
+        {
+            var s = await RepoAsync(("a.txt", "a\n"));
+            Assert.That((await _repo.RunRawAsync("checkout", "-b", "other")).ExitCode, Is.EqualTo(0), "setup: branch other");
+            await GitSandbox.CommitFileAsync(_repo, "b.txt", "b\n", "other adds b");
+            Assert.That((await _repo.RunRawAsync("checkout", "main")).ExitCode, Is.EqualTo(0), "setup: back on main");
+            await WriteAndRefreshAsync(s, ("a.txt", "changed\n"));
+            // Started in a terminal after the window's last refresh: the snapshot still says no operation.
+            Assert.That((await _repo.RunRawAsync("merge", "--no-ff", "--no-commit", "other")).ExitCode, Is.EqualTo(0), "setup: merge in progress");
+
+            var o = await s.RevertAsync(new[] { "a.txt" });
+
+            AssertOutcome(o, OutcomeKind.Refused, "Finish or abort the merge first");
+            Assert.That(Read("a.txt"), Is.EqualTo("changed\n"));
+            Assert.That(_hooks.Calls, Is.Empty);
+        }
+
+        [Test] public async Task Revert_LongPathsBeyondCommandLineLimit_RevertsAll()
+        {
+            // Asset-pack paths with their .meta: all of them in one git command line would pass Windows' 32,767 characters.
+            const string folder = "Assets/Polygon Fantasy Kingdom/Prefabs/Buildings/Castle Parts/";
+            var s = await RepoAsync();
+            var tracked = Enumerable.Range(0, 120).Select(i => $"{folder}SM_Bld_Castle_Tower_Tracked_{i:000}.prefab").ToList();
+            var trackedFiles = tracked.SelectMany(p => new[] { p, p + ".meta" }).ToList();
+            foreach (var path in trackedFiles) GitSandbox.WriteFile(_repo, path, "base\n");
+            await _repo.Index.StageAsync(trackedFiles);
+            Assert.That((await _repo.CommitAsync("pack")).Succeeded, Is.True, "setup: one commit");
+            foreach (var path in tracked) GitSandbox.WriteFile(_repo, path, "changed\n");
+            for (var i = 0; i < 130; i++)
+            {
+                var path = $"{folder}SM_Bld_Castle_Tower_Imported_{i:000}.prefab";
+                GitSandbox.WriteFile(_repo, path, "new\n");
+                GitSandbox.WriteFile(_repo, path + ".meta", "meta\n");
+            }
+            await s.RefreshAsync();
+            Assert.That(Rows(s).Count(), Is.EqualTo(250), "setup: every asset listed with its .meta");
+
+            var o = await s.RevertAsync(Rows(s).ToList());
+
+            AssertOutcome(o, OutcomeKind.Succeeded, "Reverted 250 files");
+            Assert.That(Rows(s), Is.Empty);
+        }
+
+        [Test] public async Task Revert_TrackedAssetWithNeverCommittedMeta_DialogSaysTheMetaIsDeleted()
+        {
+            var s = await RepoAsync(("Assets/A.asset", "1\n"));
+            await WriteAndRefreshAsync(s, ("Assets/A.asset", "2\n"), ("Assets/A.asset.meta", "guid: 1\n"));
+            Assert.That(s.Snapshot.Changes.Single().HasMeta, Is.True, "setup: the untracked .meta is paired with the asset");
+
+            var o = await s.RevertAsync(new[] { "Assets/A.asset" });
+
+            AssertOutcome(o, OutcomeKind.Succeeded, "Reverted 1 file");
+            Assert.That(_hooks.LastConfirmMessage, Does.Contain("1 .meta file that was never committed will be deleted, and Unity will give its asset a new GUID."));
+            Assert.That(Read("Assets/A.asset"), Is.EqualTo("1\n"));
+            Assert.That(Exists("Assets/A.asset.meta"), Is.False);
+        }
+
         [Test] public async Task Revert_IndexLocked_Fails()
         {
             var s = await RepoAsync(("a.txt", "a\n"));
