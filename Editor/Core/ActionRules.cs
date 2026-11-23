@@ -107,6 +107,12 @@ namespace UnityGit
                     if (s.Changes.Count == 0) return "Nothing to revert";
                     return null;
 
+                case GitAction.UpdatePackages:
+                    // Installing recompiles and reloads scripts, which a merge or rebase in the middle of its work shouldn't meet.
+                    if (isPlayMode) return NotInPlayMode;
+                    if (s.Operation != RepoOperation.None) return $"Finish or abort the {OperationNoun(s.Operation)} first";
+                    return null;
+
                 case GitAction.SetUpLfs:
                     if (!s.Lfs.UsedByRepo) return "This repository doesn't use LFS";
                     if (!s.Lfs.GitLfsAvailable) return "git-lfs isn't installed — install it from https://git-lfs.com";

@@ -4,7 +4,7 @@ using System.Collections.Generic;
 
 namespace UnityGit
 {
-    public enum GitAction { Init, Commit, Push, Fetch, Pull, Switch, SetUpLfs, Resolve, RestoreConflict, Continue, Abort, Revert }
+    public enum GitAction { Init, Commit, Push, Fetch, Pull, Switch, SetUpLfs, Resolve, RestoreConflict, Continue, Abort, Revert, UpdatePackages }
 
     public enum OutcomeKind { Succeeded, Failed, Cancelled, Refused }
 

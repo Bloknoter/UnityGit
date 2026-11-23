@@ -69,5 +69,16 @@ namespace UnityGit.UI
         public const string AuthorsList = "unitygit-authors";
         public const string LocksRefresh = "unitygit-locks-refresh";
         public const string VerboseToggle = "unitygit-verbose";
+        public const string UpdatesAll = "unitygit-updates-all";
+        public const string UpdatesCheck = "unitygit-updates-check";
+        public const string UpdatesStatus = "unitygit-updates-status";
+        public const string UpdatesError = "unitygit-updates-error";
+        /// <summary>A package card's name; its parts are named this followed by <see cref="UpdatesInstalled"/> and the rest.</summary>
+        public static string UpdatesCard(string package) => "unitygit-updates-" + PackageNames.Display(package).ToLowerInvariant();
+        public const string UpdatesInstalled = "-installed";
+        public const string UpdatesSource = "-source";
+        public const string UpdatesLatest = "-latest";
+        public const string UpdatesUpdate = "-update";
+        public const string UpdatesVersions = "-versions";
     }
 }

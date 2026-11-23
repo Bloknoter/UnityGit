@@ -89,6 +89,10 @@ namespace UnityGit.Tests
             Assert.That(Why(GitAction.SetUpLfs, Ready(s => s.Lfs = new LfsInfo { UsedByRepo = true, GitLfsAvailable = true, HooksInstalled = true })), Is.EqualTo("LFS is already set up"));
             Assert.That(Why(GitAction.SetUpLfs, Ready(s => s.Lfs = new LfsInfo { UsedByRepo = true, GitLfsAvailable = true })), Is.Null);
         }
+        [Test] public void UpdatePackages_WhenReady_Allowed() => Assert.That(Why(GitAction.UpdatePackages, Ready(s => s.Changes = Array.Empty<ChangeItem>())), Is.Null);
+        [Test] public void UpdatePackages_InPlayMode_Refused() => Assert.That(Why(GitAction.UpdatePackages, Ready(), play: true), Is.EqualTo("Not available in Play Mode"));
+        [Test] public void UpdatePackages_DuringOperation_Refused()
+            => Assert.That(Why(GitAction.UpdatePackages, Ready(s => s.Operation = RepoOperation.Merging)), Is.EqualTo("Finish or abort the merge first"));
         [Test] public void Revert_WhenReady_Allowed() => Assert.That(Why(GitAction.Revert, Ready()), Is.Null);
         [Test] public void Revert_InPlayMode_Refused() => Assert.That(Why(GitAction.Revert, Ready(), play: true), Is.EqualTo("Not available in Play Mode"));
         [Test] public void Revert_DuringOperation_Refused()

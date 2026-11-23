@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.4.0] - 2026-11-23
+
+### Added
+
+- **Updates** tab: the installed and newest releases of UnityGit and FlexGit, read from their repositories' tags (`vX.Y.Z` and `upm/vX.Y.Z`). **Update** per package, **Update all**, and **Other versions** to move to any release, older ones included.
+- A check for updates once per editor session, a few seconds after the editor loads, without sign-in prompts and with a 30-second limit. The Updates tab shows how many packages have an update, and the Console has one line naming them.
+- Installing a UnityGit release also installs the FlexGit it needs, in the same Package Manager step. FlexGit releases the installed UnityGit can't use, and releases that need a newer Unity, aren't offered.
+- The outcome bar reports each install, a Package Manager error, or scripts that don't compile afterwards.
+
 ## [1.3.0] - 2026-11-23
 
 ### Added

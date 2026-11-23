@@ -9,7 +9,7 @@ using UnityGit.UI.Theme;
 
 namespace UnityGit.UI
 {
-    public enum WindowTab { Overview, Changes, Conflicts, Branches, History, Authors, More }
+    public enum WindowTab { Overview, Changes, Conflicts, Branches, History, Authors, More, Updates }
 
     /// <summary>
     /// The window's content (spec §5.7), built in code so it can be created and tested without an EditorWindow.
@@ -25,6 +25,7 @@ namespace UnityGit.UI
         static readonly WindowTab[] Tabs = (WindowTab[])Enum.GetValues(typeof(WindowTab));
 
         readonly GitSession _session;
+        readonly PackageUpdates _updates;
         // The selected tab is kept by name in SessionState, so the view a domain reload builds (a script change, entering
         // Play Mode) opens on it. The key holds the project path, so sessions on other folders (the tests' sandboxes) keep
         // their own.
@@ -54,9 +55,12 @@ namespace UnityGit.UI
         RepoAvailability? _bodyAvailability;
         Action _renderBody = () => { };
 
-        public GitWindowView(GitSession session)
+        public GitWindowView(GitSession session) : this(session, null) { }
+
+        internal GitWindowView(GitSession session, PackageUpdates? updates)
         {
             _session = session;
+            _updates = updates ?? PackageUpdatesProvider.Current;
             _tabKey = SelectedTabKey(session.ProjectPath);
             var saved = SessionState.GetString(_tabKey, string.Empty);
             foreach (var tab in Tabs)
@@ -128,9 +132,15 @@ namespace UnityGit.UI
             {
                 _session.Changed -= Render;
                 _session.Changed += Render;
+                _updates.Changed -= Render;
+                _updates.Changed += Render;
                 Render(); // catch up on changes made while detached
             });
-            RegisterCallback<DetachFromPanelEvent>(_ => _session.Changed -= Render);
+            RegisterCallback<DetachFromPanelEvent>(_ =>
+            {
+                _session.Changed -= Render;
+                _updates.Changed -= Render;
+            });
             _factories[WindowTab.Overview] = session => new OverviewPanel(session);
             _factories[WindowTab.Changes] = session => new ChangesPanel(session);
             _factories[WindowTab.Conflicts] = session => new ConflictsPanel(session);
@@ -138,6 +148,7 @@ namespace UnityGit.UI
             _factories[WindowTab.History] = session => new HistoryPanel(session);
             _factories[WindowTab.Authors] = session => new AuthorsPanel(session);
             _factories[WindowTab.More] = session => new MorePanel(session);
+            _factories[WindowTab.Updates] = _ => new UpdatesPanel(_updates);
             Render();
         }
 
@@ -337,11 +348,11 @@ namespace UnityGit.UI
             split.Add(host);
             _body.Add(split);
 
-            var shownNav = (-1, -1, -1);
+            var shownNav = (-1, -1, -1, -1);
             return () =>
             {
                 var s = _session.Snapshot;
-                var navState = (_visibleTabs.Count, s.Changes.Count, s.ConflictedPaths.Count);
+                var navState = (_visibleTabs.Count, s.Changes.Count, s.ConflictedPaths.Count, _updates.UpdateCount);
                 if (navState != shownNav)
                 {
                     shownNav = navState;
@@ -373,13 +384,16 @@ namespace UnityGit.UI
         static string TabLabel(WindowTab tab) => tab.ToString();
 
         /// <summary>
-        /// The nav badge for <paramref name="tab"/>: the change count on Changes, the conflicted path count on Conflicts;
-        /// null (hidden) at 0 and elsewhere.
+        /// The nav badge for <paramref name="tab"/>: the change count on Changes, the conflicted path count on Conflicts,
+        /// the number of packages with a newer release on Updates; null (hidden) at 0 and elsewhere.
         /// </summary>
         internal string? TabBadge(WindowTab tab)
         {
             var s = _session.Snapshot;
-            var count = tab == WindowTab.Changes ? s.Changes.Count : tab == WindowTab.Conflicts ? s.ConflictedPaths.Count : 0;
+            var count = tab == WindowTab.Changes ? s.Changes.Count
+                : tab == WindowTab.Conflicts ? s.ConflictedPaths.Count
+                : tab == WindowTab.Updates ? _updates.UpdateCount
+                : 0;
             return count > 0 ? PanelParts.Count(count) : null;
         }
 

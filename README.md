@@ -13,7 +13,7 @@ Add both lines to your project's `Packages/manifest.json`. FlexGit must come fir
 
 ```json
 "com.bloknoter.flexgit": "https://github.com/Bloknoter/FlexGit.git#upm/v2.2.0",
-"com.bloknoter.unitygit": "https://github.com/Bloknoter/UnityGit.git#v1.3.0"
+"com.bloknoter.unitygit": "https://github.com/Bloknoter/UnityGit.git#v1.4.0"
 ```
 
 Or do the same in Package Manager with **Add package from git URL**: add the FlexGit URL first, then the UnityGit URL.
@@ -33,6 +33,7 @@ The window has an action toolbar (branch dropdown, Commit, Fetch, Pull, Push, Re
 - **Authors**: names, emails and commit counts.
 - **Conflicts**: shown while a file is conflicted or a merge or rebase is in progress. See **Conflicts** below.
 - **More**: tags, stashes, LFS details and locks.
+- **Updates**: newer releases of UnityGit and FlexGit, Update buttons and every older release. See **Updates** below.
 
 Action rules:
 
@@ -75,6 +76,17 @@ The Conflicts tab appears while a file is conflicted or a merge or rebase is in 
 - Scenes and prefabs show a warning: picking places one by one can break them.
 - Pending choices are not kept across a script reload. The selected tab is.
 
+## Updates
+
+The Updates tab installs newer or older releases of UnityGit and FlexGit when they come from git URLs in `Packages/manifest.json`. A release is a tag: `vX.Y.Z` for UnityGit and `upm/vX.Y.Z` for FlexGit (FlexGit's plain `vX.Y.Z` tags are not in the package layout and are never offered). The repository URLs are the ones in your manifest, so forks work too.
+
+- **Checking**: once per editor session, a few seconds after the editor loads, UnityGit reads both repositories' tags with `git ls-remote`, which downloads nothing, whether or not the window is open. **Check for updates** checks again. When something is newer, the Updates tab shows how many packages have an update and the Console has one line saying so. The check never asks for a sign-in: on a private repository without saved credentials, or offline, it fails quietly and the tab shows why. Each git call gives up after 30 seconds.
+- **Update** installs the newest release of one package. **Update all** installs the newest UnityGit with the newest FlexGit it can use. **Other versions** lists every release, newest first, to move to; the installed one is ticked.
+- **The two packages stay compatible.** UnityGit needs the FlexGit version its `package.json` names (same major version, that version or newer). Installing a UnityGit release also installs the FlexGit it needs, in the same step. FlexGit releases the installed UnityGit can't use are disabled in the list, with the reason. A release whose `package.json` needs a newer Unity than yours isn't offered.
+- **Installing** asks first and lists each change ("UnityGit 1.2.0 → 1.4.0, FlexGit 2.2.0 → 2.3.0"). Package Manager then rewrites the manifest entries in one go and Unity recompiles. The outcome bar says what was installed, or Package Manager's error, or that the scripts don't compile afterwards. Not available in Play Mode, during a merge or rebase, or while another git action runs.
+- Releases before 1.4.0 have no Updates tab. Moving back to one asks first and says so; to come back, use Package Manager or edit `Packages/manifest.json`.
+- Embedded, local and registry packages are shown but never changed. The release cache lives in `Library/UnityGit/ReleaseCache.git` and can be deleted at any time.
+
 ## Main toolbar buttons
 
 UnityGit adds five elements to Unity's main toolbar (the bar with Play): Branch, Commit, Fetch, Pull and Push. Pull and Push show the behind and ahead counts. They read the same state as the window, so both always agree.
@@ -92,6 +104,7 @@ Unity 6000.4 has no API for choosing an element's default visibility, so all fiv
 - Windows is the primary platform. macOS and Linux are untested.
 - Unity versions older than 6000.3 are not supported.
 - Reverting every file of a new folder leaves the empty folder behind, and Unity gives it a new `.meta`.
+- The Updates tab is in the window's navigation, which shows only while the project is in a repository git can open. It reads tags only (no release notes), ignores pre-release tags such as `v1.4.0-beta`, and offers releases of UnityGit and FlexGit only.
 
 ## License
 

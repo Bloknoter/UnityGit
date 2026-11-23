@@ -903,3 +903,28 @@
     min-width: 96px;
     margin-right: 0;
 }
+
+/* Updates tab */
+.unitygit-window .unitygit-updates-card > .ed-card__header > .unity-button {
+    margin-top: 0;
+    margin-bottom: 0;
+}
+
+.unitygit-updates-error {
+    white-space: normal;
+    color: var(--ed-error-text);
+    margin-top: var(--ed-space-1);
+}
+
+.unitygit-updates-version {
+    margin-right: var(--ed-space-2);
+}
+
+.unitygit-updates-buttons {
+    margin-top: var(--ed-space-2);
+}
+
+.unitygit-window .unitygit-updates-buttons > .unity-button {
+    margin-left: 0;
+    margin-right: var(--ed-space-1);
+}
