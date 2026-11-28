@@ -81,5 +81,20 @@ namespace UnityGit.UI
         public const string UpdatesLatest = "-latest";
         public const string UpdatesUpdate = "-update";
         public const string UpdatesVersions = "-versions";
+        public const string GitignoreFiles = "unitygit-gitignore-files";
+        public const string GitignoreMode = "unitygit-gitignore-mode";
+        public const string GitignoreAddRule = "unitygit-gitignore-add-rule";
+        public const string GitignoreUndo = "unitygit-gitignore-undo";
+        public const string GitignoreAutoSave = "unitygit-gitignore-auto-save";
+        public const string GitignoreSave = "unitygit-gitignore-save";
+        public const string GitignoreNote = "unitygit-gitignore-note";
+        public const string GitignoreCreateTemplate = "unitygit-gitignore-create-template";
+        public const string GitignoreCreateEmpty = "unitygit-gitignore-create-empty";
+        public const string GitignoreReload = "unitygit-gitignore-reload";
+        public const string GitignoreBody = "unitygit-gitignore-body";
+        public const string GitignorePlain = "unitygit-gitignore-plain";
+        public const string GitignoreField = "unitygit-gitignore-field";
+        public const string GitignoreBlocks = "unitygit-gitignore-blocks";
+        public const string GitignoreDropLine = "unitygit-gitignore-drop-line";
     }
 }

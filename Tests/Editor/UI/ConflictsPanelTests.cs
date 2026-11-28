@@ -98,7 +98,7 @@ namespace UnityGit.Tests
             Assert.That(v.VisibleTabs, Is.EqualTo(new[]
             {
                 WindowTab.Overview, WindowTab.Changes, WindowTab.Conflicts, WindowTab.Branches, WindowTab.History,
-                WindowTab.Authors, WindowTab.More, WindowTab.Updates,
+                WindowTab.Authors, WindowTab.Gitignore, WindowTab.More, WindowTab.Updates,
             }));
             Assert.That(v.TabBadge(WindowTab.Conflicts), Is.EqualTo("1"));
             Assert.That(v.TabBadgeTone(WindowTab.Conflicts), Is.EqualTo(EditorUiTone.Error));

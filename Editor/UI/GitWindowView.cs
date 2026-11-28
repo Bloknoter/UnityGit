@@ -9,7 +9,7 @@ using UnityGit.UI.Theme;
 
 namespace UnityGit.UI
 {
-    public enum WindowTab { Overview, Changes, Conflicts, Branches, History, Authors, More, Updates }
+    public enum WindowTab { Overview, Changes, Conflicts, Branches, History, Authors, Gitignore, More, Updates }
 
     /// <summary>
     /// The window's content (spec §5.7), built in code so it can be created and tested without an EditorWindow.
@@ -147,6 +147,7 @@ namespace UnityGit.UI
             _factories[WindowTab.Branches] = session => new BranchesPanel(session);
             _factories[WindowTab.History] = session => new HistoryPanel(session);
             _factories[WindowTab.Authors] = session => new AuthorsPanel(session);
+            _factories[WindowTab.Gitignore] = session => new GitignorePanel(session);
             _factories[WindowTab.More] = session => new MorePanel(session);
             _factories[WindowTab.Updates] = _ => new UpdatesPanel(_updates);
             Render();
@@ -381,7 +382,7 @@ namespace UnityGit.UI
             return panel;
         }
 
-        static string TabLabel(WindowTab tab) => tab.ToString();
+        static string TabLabel(WindowTab tab) => tab == WindowTab.Gitignore ? GitignoreText.TabLabel : tab.ToString();
 
         /// <summary>
         /// The nav badge for <paramref name="tab"/>: the change count on Changes, the conflicted path count on Conflicts,
