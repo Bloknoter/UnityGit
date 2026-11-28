@@ -95,7 +95,9 @@ namespace UnityGit.Tests
         [Test]
         public void Texts()
         {
-            Assert.That(PreviewText.Selected(3), Is.EqualTo("3 files selected"));
+            Assert.That(PreviewText.Selected(3, 0), Is.EqualTo("3 files selected"));
+            Assert.That(PreviewText.Selected(1, 1), Is.EqualTo("1 file and 1 folder selected"));
+            Assert.That(PreviewText.Selected(1200, 3), Is.EqualTo("1200 files and 3 folders selected"));
             Assert.That(PreviewText.Size(512), Is.EqualTo("512 B"));
             Assert.That(PreviewText.Size(12_595), Is.EqualTo("12.3 KB"));
             Assert.That(PreviewText.Size(1_258_291), Is.EqualTo("1.2 MB"));

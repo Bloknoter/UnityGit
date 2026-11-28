@@ -13,7 +13,7 @@ Add both lines to your project's `Packages/manifest.json`. FlexGit must come fir
 
 ```json
 "com.bloknoter.flexgit": "https://github.com/Bloknoter/FlexGit.git#upm/v2.2.0",
-"com.bloknoter.unitygit": "https://github.com/Bloknoter/UnityGit.git#v1.5.0"
+"com.bloknoter.unitygit": "https://github.com/Bloknoter/UnityGit.git#v1.5.1"
 ```
 
 Or do the same in Package Manager with **Add package from git URL**: add the FlexGit URL first, then the UnityGit URL.
@@ -59,7 +59,7 @@ Select one file in Changes to see what changed in it since the last commit (stag
 - **Audio** (anything Unity imports as an audio clip): Play/Stop and the clip's length. Playback uses Unity's internal audio preview; if a Unity version removes it, Play is disabled.
 - **Other binary files**: their sizes. **Git LFS files**: their real sizes.
 - An asset with its `.meta` shows the asset first, then the `.meta`'s changes.
-- Two or more selected files show "X files selected". A conflicted file points to the Conflicts tab.
+- Two or more selected rows show how many files they stand for, "X files selected", or "X files and Y folders selected" when folders are among them (a file inside a selected folder counts once). A conflicted file points to the Conflicts tab.
 - To keep the editor responsive, a preview shows at most 1,000 lines and cuts lines longer than 1,000 characters. A new file over 4 MB is only read in part.
 
 ## Conflicts

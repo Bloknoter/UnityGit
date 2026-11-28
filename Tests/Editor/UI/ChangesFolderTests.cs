@@ -351,8 +351,23 @@ namespace UnityGit.Tests
 
             p.Select(new[] { AB });
             Assert.That(p.Preview.NoteText, Is.EqualTo("1 file in this folder — select it to preview"));
+        }
+
+        // Several lines selected: the files they stand for (each once), and how many of the lines are folders.
+        [Test] public async Task Preview_SeveralSelected_CountsFilesAndFolders()
+        {
+            var p = Panel((await SessionWithFilesAsync(Files)).s);
 
             p.Select(new[] { A, "top.txt" });
+            Assert.That(p.Preview.NoteText, Is.EqualTo("4 files and 1 folder selected"));
+
+            p.Select(new[] { A, AB, "Assets/A/x.txt" }); // AB and x.txt are inside A: their files count once
+            Assert.That(p.Preview.NoteText, Is.EqualTo("3 files and 2 folders selected"));
+
+            p.Select(new[] { AB, "Assets/A/B/y.txt" });
+            Assert.That(p.Preview.NoteText, Is.EqualTo("1 file and 1 folder selected"));
+
+            p.Select(new[] { "Assets/A/x.txt", "top.txt" });
             Assert.That(p.Preview.NoteText, Is.EqualTo("2 files selected"));
         }
 

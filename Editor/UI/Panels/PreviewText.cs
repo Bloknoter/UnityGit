@@ -16,7 +16,17 @@ namespace UnityGit.UI
         public const string EmptyFile = "Empty file";
         public const string NoContentChanges = "No changes in the content";
 
-        public static string Selected(int n) => $"{PanelParts.Count(n)} files selected";
+        /// <summary>
+        /// Several lines selected: "3 files selected", or with folders among them "4 files and 1 folder selected". Files are the
+        /// file rows the lines stand for (a folder's counted once each); folders are the selected folder lines.
+        /// </summary>
+        public static string Selected(int files, int folders)
+        {
+            var fileText = files == 1 ? "1 file" : $"{PanelParts.Count(files)} files";
+            if (folders == 0) return fileText + " selected";
+            var folderText = folders == 1 ? "1 folder" : $"{PanelParts.Count(folders)} folders";
+            return $"{fileText} and {folderText} selected";
+        }
 
         /// <summary>One folder row selected: how many file rows it ticks.</summary>
         public static string Folder(int n) => n == 1

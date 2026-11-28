@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.5.1] - 2026-11-28
+
+### Fixed
+
+- With several rows selected, the preview counts the files they stand for, not the rows: a selected folder counts its files, each file once. When folders are among them it also says how many, as in "4 files and 1 folder selected".
+
 ## [1.5.0] - 2026-11-28
 
 ### Added

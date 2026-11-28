@@ -517,7 +517,7 @@ namespace UnityGit.UI
             var selected = SelectedRows;
             string? note = null;
             if (selected.Count == 0) note = PreviewText.SelectFile;
-            else if (selected.Count > 1) note = PreviewText.Selected(selected.Count);
+            else if (selected.Count > 1) note = PreviewText.Selected(ExpandToFiles(selected).Count, selected.Count(k => _entryByKey[k].IsFolder));
             else if (_entryByKey[selected[0]].IsFolder) note = PreviewText.Folder(_entryByKey[selected[0]].Files.Count);
             else if (_byPath[selected[0]].IsConflicted) note = PreviewText.Conflicted;
             if (note != null)
