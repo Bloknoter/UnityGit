@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0] - 2026-11-28
+
+### Added
+
+- Folder rows in Changes, above the files in each folder. Ticking a folder ticks or unticks every file under it; a folder shows – when only some of its files are ticked, and follows ticks made on its files. A folder's `.meta` is part of its row. Selecting a folder previews nothing and says how many files it holds. Right-click a folder to revert everything in it, or to show it in Explorer or the Project window.
+- A **Show folders** button at the right of the Changes header hides folder rows, giving back the plain list. The choice is remembered.
+
 ## [1.4.0] - 2026-11-23
 
 ### Added
