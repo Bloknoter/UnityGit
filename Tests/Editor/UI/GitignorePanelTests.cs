@@ -307,5 +307,109 @@ namespace UnityGit.Tests
             Assert.That(again.Text, Is.EqualTo("draft\n"));
             Assert.That(again.HasUnsavedChanges, Is.True);
         }
+
+        // ---- switching file and the window's unsaved state ----
+
+        async Task<(GitRepository repo, GitSession s, GitignorePanel p)> TwoFilesAsync(bool autoSave)
+        {
+            var (repo, s) = await RepoAsync();
+            await GitSandbox.CommitFileAsync(repo, "a/.gitignore", "A\n", "nested");
+            var p = await PanelAsync(s);
+            Assert.That((p.FilePath, p.Files.Count), Is.EqualTo((".gitignore", 2)), "setup");
+            p.AutoSave = autoSave;
+            p.SetPlainText("edited\n");
+            return (repo, s, p);
+        }
+
+        [Test]
+        public async Task Switch_Unsaved_Save_SavesThenSwitches()
+        {
+            var (repo, _, p) = await TwoFilesAsync(autoSave: false);
+            p.AskSwitch = _ => GitignoreSwitchChoice.Save;
+
+            Assert.That(await p.SelectFileAsync("a/.gitignore"), Is.True);
+
+            Assert.That(Disk(repo), Is.EqualTo("edited\n"));
+            Assert.That((p.FilePath, p.Text, p.HasUnsavedChanges), Is.EqualTo(("a/.gitignore", "A\n", false)));
+        }
+
+        [Test]
+        public async Task Switch_Unsaved_DontSave_Discards()
+        {
+            var (repo, s, p) = await TwoFilesAsync(autoSave: false);
+            p.AskSwitch = _ => GitignoreSwitchChoice.DontSave;
+
+            Assert.That(await p.SelectFileAsync("a/.gitignore"), Is.True);
+
+            Assert.That(Disk(repo), Is.EqualTo(Original));
+            Assert.That(p.FilePath, Is.EqualTo("a/.gitignore"));
+            Assert.That(GitignorePanel.HasDraft(s.ProjectPath), Is.False);
+        }
+
+        [Test]
+        public async Task Switch_Unsaved_Cancel_Stays()
+        {
+            var (repo, _, p) = await TwoFilesAsync(autoSave: false);
+            string? asked = null;
+            p.AskSwitch = path => { asked = path; return GitignoreSwitchChoice.Cancel; };
+
+            Assert.That(await p.SelectFileAsync("a/.gitignore"), Is.False);
+
+            Assert.That(asked, Is.EqualTo(".gitignore"));
+            Assert.That((p.FilePath, p.Text, p.HasUnsavedChanges), Is.EqualTo((".gitignore", "edited\n", true)));
+            Assert.That(p.Q<DropdownField>(UiNames.GitignoreFiles).value, Is.EqualTo(".gitignore"));
+            Assert.That(Disk(repo), Is.EqualTo(Original));
+        }
+
+        [Test]
+        public async Task Switch_AutoSave_SavesWithoutAsking()
+        {
+            var (repo, _, p) = await TwoFilesAsync(autoSave: true);
+            p.AskSwitch = _ => throw new AssertionException("auto-save doesn't ask");
+
+            Assert.That(await p.SelectFileAsync("a/.gitignore"), Is.True);
+
+            Assert.That(Disk(repo), Is.EqualTo("edited\n"));
+        }
+
+        [Test]
+        public async Task View_ReportsUnsaved_OnlyWithAutoSaveOff()
+        {
+            var (_, s) = await RepoAsync();
+            var v = new GitWindowView(s);
+            v.SelectTab(WindowTab.Gitignore);
+            var p = v.Q<GitignorePanel>();
+            await p.Loaded;
+            var raised = 0;
+            v.UnsavedChanged += () => raised++;
+
+            p.SetPlainText("x\n");
+            Assert.That(v.HasUnsavedChanges, Is.False, "auto-save will save it");
+
+            p.AutoSave = false;
+            Assert.That(v.HasUnsavedChanges, Is.True);
+            Assert.That(raised, Is.GreaterThan(0));
+            Assert.That(v.UnsavedMessage, Is.EqualTo(".gitignore has unsaved changes."));
+            Assert.That(v.SaveChanges(), Is.True);
+            Assert.That(v.HasUnsavedChanges, Is.False);
+        }
+
+        [Test]
+        public async Task View_DraftBeforeTabOpened_Reported()
+        {
+            var (repo, s) = await RepoAsync();
+            var p = await PanelAsync(s);
+            p.AutoSave = false;
+            p.SetPlainText("draft\n");
+
+            var v = new GitWindowView(s); // on another tab
+
+            Assert.That(v.SelectedTab, Is.Not.EqualTo(WindowTab.Gitignore), "setup");
+            Assert.That(v.HasUnsavedChanges, Is.True);
+            v.DiscardChanges();
+            Assert.That(v.HasUnsavedChanges, Is.False);
+            Assert.That(GitignorePanel.HasDraft(s.ProjectPath), Is.False);
+            Assert.That(Disk(repo), Is.EqualTo(Original));
+        }
     }
 }

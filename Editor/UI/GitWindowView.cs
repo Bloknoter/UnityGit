@@ -150,10 +150,31 @@ namespace UnityGit.UI
             _factories[WindowTab.Gitignore] = session => new GitignorePanel(session);
             _factories[WindowTab.More] = session => new MorePanel(session);
             _factories[WindowTab.Updates] = _ => new UpdatesPanel(_updates);
+            // Unsaved .gitignore text kept from before a script reload: its panel holds it now, so the window reports it
+            // to Unity's close prompt before the tab is opened.
+            if (GitignorePanel.HasDraft(session.ProjectPath)) PanelFor(WindowTab.Gitignore);
             Render();
         }
 
         public WindowTab SelectedTab { get; private set; }
+
+        /// <summary>Unsaved .gitignore text that auto-save won't save; the window passes it to Unity's close prompt.</summary>
+        public bool HasUnsavedChanges => Gitignore?.ReportsUnsavedChanges ?? false;
+
+        public string UnsavedMessage => GitignoreText.Unsaved(Gitignore?.FilePath ?? ".gitignore");
+
+        /// <summary>Saves the unsaved .gitignore text; false when that failed.</summary>
+        public bool SaveChanges() => Gitignore?.Save() ?? true;
+
+        public void DiscardChanges() => Gitignore?.Discard();
+
+        /// <summary>Saves what auto-save was waiting to save (the window is closing or reloading).</summary>
+        public void FlushPendingSave() => Gitignore?.FlushPendingSave();
+
+        /// <summary>Raised when <see cref="HasUnsavedChanges"/> may have changed.</summary>
+        public event Action? UnsavedChanged;
+
+        GitignorePanel? Gitignore => _panels.TryGetValue(WindowTab.Gitignore, out var panel) ? panel as GitignorePanel : null;
 
         /// <summary>The SessionState key that keeps the selected tab of the project at <paramref name="projectPath"/>.</summary>
         internal static string SelectedTabKey(string projectPath) => "UnityGit.SelectedTab." + projectPath;
@@ -378,6 +399,11 @@ namespace UnityGit.UI
             {
                 panel = _factories.TryGetValue(tab, out var factory) ? factory(_session) : new Label();
                 _panels[tab] = panel;
+                if (panel is GitignorePanel gitignore)
+                {
+                    gitignore.UnsavedChanged += () => UnsavedChanged?.Invoke();
+                    UnsavedChanged?.Invoke();
+                }
             }
             return panel;
         }

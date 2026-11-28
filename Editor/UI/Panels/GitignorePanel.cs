@@ -12,6 +12,8 @@ namespace UnityGit.UI
 {
     internal enum GitignoreMode { Blocks, PlainText }
 
+    internal enum GitignoreSwitchChoice { Save, DontSave, Cancel }
+
     /// <summary>
     /// The .gitignore tab (spec "UnityGit: .gitignore editor tab"). It keeps the selected file's text and the baseline (the
     /// text last read from or written to disk); the text is unsaved while they differ. It saves at once or after typing
@@ -301,12 +303,63 @@ namespace UnityGit.UI
             _ = _session.RefreshAsync();
         }
 
+        /// <summary>
+        /// Asks what to do with unsaved text before another file is opened. Tests replace it; the default is Unity's
+        /// three-button dialog.
+        /// </summary>
+        internal Func<string, GitignoreSwitchChoice> AskSwitch { get; set; } = AskSwitchInDialog;
+
+        /// <summary>
+        /// Opens another .gitignore. Unsaved text is saved first with auto-save on, otherwise <see cref="AskSwitch"/> decides:
+        /// save, drop it, or stay. False when it stayed or the save failed.
+        /// </summary>
         internal Task<bool> SelectFileAsync(string repoPath)
         {
-            FlushPendingSave();
+            if (repoPath == _filePath) return Task.FromResult(true);
+            if (AutoSave) FlushPendingSave();
+            if (HasUnsavedChanges) // auto-save off, or it couldn't save (a git action runs, the file changed on disk)
+            {
+                switch (AskSwitch(_filePath ?? ".gitignore"))
+                {
+                    case GitignoreSwitchChoice.Save:
+                        if (Save()) break;
+                        RenderState();
+                        return Task.FromResult(false);
+                    case GitignoreSwitchChoice.DontSave:
+                        Discard();
+                        break;
+                    default:
+                        RenderState(); // puts the dropdown back
+                        return Task.FromResult(false);
+                }
+            }
             LoadFile(repoPath);
             RenderState();
             return Task.FromResult(true);
+        }
+
+        /// <summary>What the window reports to Unity's close prompt: unsaved text that auto-save won't save.</summary>
+        internal bool ReportsUnsavedChanges => !AutoSave && HasUnsavedChanges;
+
+        /// <summary>Drops the unsaved text: back to the baseline.</summary>
+        internal void Discard()
+        {
+            _pendingSave?.Pause();
+            _text = _baseline;
+            _diskVersion = null;
+            EraseDraft();
+            NotifyUnsaved();
+            RenderState();
+        }
+
+        /// <summary>Whether this project has unsaved .gitignore text kept from before a script reload.</summary>
+        internal static bool HasDraft(string projectPath) => SessionState.GetString(DraftPathKey + projectPath, string.Empty).Length > 0;
+
+        static GitignoreSwitchChoice AskSwitchInDialog(string path)
+        {
+            var choice = EditorUtility.DisplayDialogComplex(GitignoreText.SwitchTitle(path), GitignoreText.SwitchMessage,
+                GitignoreText.SwitchSave, GitignoreText.SwitchCancel, GitignoreText.SwitchDontSave);
+            return choice == 0 ? GitignoreSwitchChoice.Save : choice == 2 ? GitignoreSwitchChoice.DontSave : GitignoreSwitchChoice.Cancel;
         }
 
         // ---- loading ----

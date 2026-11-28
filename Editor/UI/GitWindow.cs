@@ -36,7 +36,32 @@ namespace UnityGit.UI
             if (_pendingTab is WindowTab tab) _view.SelectTab(tab);
             _pendingTab = null;
             rootVisualElement.Add(_view);
+            _view.UnsavedChanged += SyncUnsavedChanges;
+            SyncUnsavedChanges();
             SessionProvider.RequestRefresh(); // the window opening is a refresh trigger (spec §5.4)
         }
+
+        // Unsaved .gitignore text (with auto-save off) makes Unity ask Save / Discard before the window closes.
+        void SyncUnsavedChanges()
+        {
+            if (_view == null) return;
+            saveChangesMessage = _view.UnsavedMessage;
+            hasUnsavedChanges = _view.HasUnsavedChanges;
+        }
+
+        // A failed save leaves hasUnsavedChanges set, so the window stays open with the error shown.
+        public override void SaveChanges()
+        {
+            if (_view == null || _view.SaveChanges()) base.SaveChanges();
+        }
+
+        public override void DiscardChanges()
+        {
+            _view?.DiscardChanges();
+            base.DiscardChanges();
+        }
+
+        // Closing the window or a script reload: what auto-save was waiting to save is saved now.
+        void OnDisable() => _view?.FlushPendingSave();
     }
 }
