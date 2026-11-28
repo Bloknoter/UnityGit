@@ -21,7 +21,13 @@ namespace UnityGit.UI
         /// <summary>The class on an icon <see cref="Apply(ToolbarMenu, GitIcon)"/> adds to a menu.</summary>
         public const string IconClass = "unitygit-icon";
 
+        /// <summary>The class on a <see cref="LoadFolder"/> image. Not tinted: Unity's folder icon has its own colours.</summary>
+        public const string FolderIconClass = "unitygit-folder-icon";
+
         public static string PathOf(GitIcon icon) => $"{Folder}/{icon.ToString().ToLowerInvariant()}.png";
+
+        /// <summary>Unity's own folder icon, as the Project window shows it for the current skin; null if Unity has none.</summary>
+        public static Texture2D? LoadFolder() => EditorGUIUtility.FindTexture("Folder Icon");
 
         /// <summary>The icon's texture, or null when its file is missing.</summary>
         public static Texture2D? Load(GitIcon icon) => AssetDatabase.LoadAssetAtPath<Texture2D>(PathOf(icon));

@@ -323,6 +323,15 @@
     padding-right: 0;
 }
 
+/* A folder row's icon, in the kind badge's place and lined up with it. Not tinted: Unity's folder icon has its own colours. */
+.unitygit-window .unitygit-list-row > .unitygit-folder-icon {
+    width: 20px;
+    height: 16px;
+    flex-shrink: 0;
+    margin-left: var(--ed-space-1);
+    margin-right: var(--ed-space-2);
+}
+
 .unitygit-change-path {
     flex-grow: 1;
 }

@@ -29,13 +29,22 @@ namespace UnityGit.UI
         // The key holds the project path, so sessions on other folders (the tests' sandboxes) keep their own.
         readonly string _messageKey;
 
-        // Unticked rather than ticked rows, so rows that appear later default to ticked.
+        /// <summary>Whether folder rows are shown, saved per user (EditorPrefs). Shown unless the user hid them.</summary>
+        internal const string ShowFoldersPref = "UnityGit.ChangesShowFolders";
+
+        // Unticked rather than ticked rows, so rows that appear later default to ticked. File rows only: a folder's box is
+        // worked out from the files under it.
         readonly HashSet<string> _unticked = new HashSet<string>(StringComparer.Ordinal);
-        // Selected rows by path, so the selection follows its rows when a refresh adds or removes others.
+        // Selected lines by key (file path, or folder path with a trailing '/'), so the selection follows its lines when a
+        // refresh adds or removes others.
         readonly HashSet<string> _selected = new HashSet<string>(StringComparer.Ordinal);
-        readonly List<ChangeItem> _items = new List<ChangeItem>();
+        // The list's lines: the file rows, plus folder rows when shown (ChangeTree).
+        readonly List<ChangeEntry> _entries = new List<ChangeEntry>();
+        Dictionary<string, ChangeEntry> _entryByKey = new Dictionary<string, ChangeEntry>(StringComparer.Ordinal);
         Dictionary<string, ChangeItem> _byPath = new Dictionary<string, ChangeItem>(StringComparer.Ordinal);
         List<string> _rows = new List<string>();
+        IReadOnlyList<ChangeItem> _changes = Array.Empty<ChangeItem>();
+        bool _showFolders;
         bool _merging;
         bool _syncingSelection; // set while the panel moves the list's selection itself, so that isn't read back
 
@@ -50,6 +59,7 @@ namespace UnityGit.UI
         {
             _session = session;
             _messageKey = "UnityGit.CommitMessage." + session.ProjectPath;
+            _showFolders = UnityEditor.EditorPrefs.GetBool(ShowFoldersPref, true);
             AddToClassList(PanelClasses.Content);
 
             // A table header lined up with the rows: the checkbox column, then "File", and the summary on the right.
@@ -72,7 +82,7 @@ namespace UnityGit.UI
                 showBorder = false,
                 showAlternatingRowBackgrounds = AlternatingRowBackground.ContentOnly,
                 selectionType = SelectionType.Multiple,
-                itemsSource = _items,
+                itemsSource = _entries,
                 makeItem = () => new ChangeRow(this),
                 bindItem = BindRow,
             };
@@ -120,11 +130,14 @@ namespace UnityGit.UI
         /// <summary>The latest preview read, for tests to wait on. Completed when nothing is being read.</summary>
         internal Task PreviewLoad { get; private set; } = Task.CompletedTask;
 
-        /// <summary>Paths of the rows currently listed.</summary>
+        /// <summary>Paths of the file rows currently listed. Folder rows aren't rows of their own: they tick these.</summary>
         internal IReadOnlyList<string> Rows => _rows;
 
-        /// <summary>Paths of the selected rows, in list order.</summary>
-        internal IReadOnlyList<string> SelectedRows => _rows.Where(_selected.Contains).ToList();
+        /// <summary>Keys of the list's lines in list order: file paths, and folder paths with a trailing '/' when folders are shown.</summary>
+        internal IReadOnlyList<string> Entries => _entries.Select(e => e.Key).ToList();
+
+        /// <summary>Keys of the selected lines (files and folders), in list order.</summary>
+        internal IReadOnlyList<string> SelectedRows => _entries.Select(e => e.Key).Where(_selected.Contains).ToList();
 
         /// <summary>True when every row that can be ticked is ticked, false when none is, null when mixed or none can be.</summary>
         internal bool? AllTicked
@@ -149,36 +162,68 @@ namespace UnityGit.UI
             return _merging || !_unticked.Contains(rowPath);
         }
 
-        /// <summary>Ignored for conflicted rows and during a merge, where every row is committed.</summary>
-        internal void SetTicked(string rowPath, bool ticked) => SetTickedRows(new[] { rowPath }, ticked);
+        /// <summary>
+        /// A folder's box, from the files under it that can be ticked: true when all are ticked, false when none are (or none
+        /// can be), null when some are. During a merge every row is locked in, so it is true.
+        /// </summary>
+        internal bool? FolderTick(string folderKey)
+        {
+            if (_merging) return true;
+            int tickable = 0, ticked = 0;
+            foreach (var file in _entryByKey[folderKey].Files)
+            {
+                if (!IsTickable(file)) continue;
+                tickable++;
+                if (IsTicked(file)) ticked++;
+            }
+            if (tickable == 0 || ticked == 0) return false;
+            return ticked == tickable ? true : (bool?)null;
+        }
+
+        /// <summary>
+        /// A file row or a folder (every file under it). Ignored for conflicted rows and during a merge, where every row is
+        /// committed.
+        /// </summary>
+        internal void SetTicked(string key, bool ticked) => SetTickedRows(ExpandToFiles(new[] { key }), ticked);
 
         /// <summary>Ticks or unticks every row, skipping the ones <see cref="SetTicked"/> ignores.</summary>
         internal void SetAllTicked(bool ticked) => SetTickedRows(_rows, ticked);
 
         /// <summary>
         /// What a row's checkbox calls: on a selected row the value applies to every selected row, on any other row only
-        /// to that row.
+        /// to that row. A folder stands for every file under it.
         /// </summary>
-        internal void ToggleRow(string rowPath, bool ticked)
-            => SetTickedRows(_selected.Contains(rowPath) ? SelectedRows : new[] { rowPath }, ticked);
+        internal void ToggleRow(string key, bool ticked)
+            => SetTickedRows(ExpandToFiles(_selected.Contains(key) ? SelectedRows : new[] { key }), ticked);
 
         /// <summary>
-        /// What Space calls: ticks every selected row if any of them is unticked, otherwise unticks them all. Rows that
-        /// can't be ticked are left out of both the check and the change.
+        /// What a folder's checkbox calls: from mixed or empty it ticks, from ticked it unticks, as the header's tick-all box
+        /// does, and for the selection when the folder is part of it (<see cref="ToggleRow"/>).
+        /// </summary>
+        internal void ToggleFolder(string folderKey)
+        {
+            ToggleRow(folderKey, FolderTick(folderKey) != true);
+            RefreshRows(); // the click flipped the box itself; put back what the files say even when nothing changed
+        }
+
+        /// <summary>
+        /// What Space calls: ticks every selected row if any of them is unticked, otherwise unticks them all. A selected folder
+        /// stands for every file under it, each file counted once. Rows that can't be ticked are left out of both the check
+        /// and the change.
         /// </summary>
         internal void ToggleSelection()
         {
-            var rows = SelectedRows.Where(IsTickable).ToList();
+            var rows = ExpandToFiles(SelectedRows).Where(IsTickable).ToList();
             if (rows.Count == 0) return;
             SetTickedRows(rows, rows.Any(r => !IsTicked(r)));
         }
 
-        /// <summary>Selects these rows, in place of the current selection. Paths that aren't listed are ignored.</summary>
-        internal void Select(IEnumerable<string> rowPaths)
+        /// <summary>Selects these lines (files or folders), in place of the current selection. Keys that aren't listed are ignored.</summary>
+        internal void Select(IEnumerable<string> keys)
         {
             _selected.Clear();
-            foreach (var path in rowPaths)
-                if (_byPath.ContainsKey(path)) _selected.Add(path);
+            foreach (var key in keys)
+                if (_entryByKey.ContainsKey(key)) _selected.Add(key);
             ShowSelection();
             UpdatePreview();
         }
@@ -230,7 +275,7 @@ namespace UnityGit.UI
         /// </summary>
         internal RowMenuState GetRowMenuState(string rowPath)
         {
-            IReadOnlyList<string> targets = _selected.Contains(rowPath) ? SelectedRows : new[] { rowPath };
+            IReadOnlyList<string> targets = ExpandToFiles(_selected.Contains(rowPath) ? SelectedRows : new[] { rowPath });
 
             var reason = _session.GetAvailability(GitAction.Revert).Reason;
             if (reason == null && targets.All(t => _byPath.TryGetValue(t, out var row) && row.IsConflicted))
@@ -278,13 +323,12 @@ namespace UnityGit.UI
         {
             var s = _session.Snapshot;
             _merging = s.Operation == RepoOperation.Merging;
-            _items.Clear();
-            _items.AddRange(s.Changes);
-            _byPath = new Dictionary<string, ChangeItem>(_items.Count, StringComparer.Ordinal);
-            foreach (var item in _items) _byPath[item.Path] = item;
-            _rows = _items.Select(i => i.Path).ToList();
+            _changes = s.Changes;
+            _byPath = new Dictionary<string, ChangeItem>(_changes.Count, StringComparer.Ordinal);
+            foreach (var item in _changes) _byPath[item.Path] = item;
+            _rows = _changes.Select(i => i.Path).ToList();
             _unticked.RemoveWhere(p => !_byPath.ContainsKey(p)); // a row that returns later should default to ticked
-            _selected.RemoveWhere(p => !_byPath.ContainsKey(p));
+            RebuildEntries();
             RefreshRows();
             UpdateSubmit();
             UpdateHeader();
@@ -318,6 +362,41 @@ namespace UnityGit.UI
 
         bool IsTickable(string rowPath)
             => !_merging && !(_byPath.TryGetValue(rowPath, out var row) && row.IsConflicted);
+
+        // The list's lines from the current rows, with or without folder rows; selected lines no longer listed are dropped.
+        void RebuildEntries()
+        {
+            _entries.Clear();
+            _entries.AddRange(ChangeTree.Build(_changes, _showFolders));
+            _entryByKey = new Dictionary<string, ChangeEntry>(_entries.Count, StringComparer.Ordinal);
+            foreach (var entry in _entries) _entryByKey[entry.Key] = entry;
+            _selected.RemoveWhere(k => !_entryByKey.ContainsKey(k));
+        }
+
+        // The file rows these keys stand for: a file row is itself (a folded folder .meta too, though it has no line of its
+        // own), a folder is every file under it. In the given order, each file once; unknown keys are ignored.
+        List<string> ExpandToFiles(IEnumerable<string> keys)
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var files = new List<string>();
+            foreach (var key in keys)
+            {
+                if (_entryByKey.TryGetValue(key, out var entry))
+                {
+                    foreach (var file in entry.Files)
+                        if (seen.Add(file)) files.Add(file);
+                }
+                else if (_byPath.ContainsKey(key) && seen.Add(key)) files.Add(key);
+            }
+            return files;
+        }
+
+        // A row's checkbox was clicked: a folder follows its own rule, a file takes the box's new value.
+        void OnRowTick(string key, bool ticked)
+        {
+            if (_entryByKey.TryGetValue(key, out var entry) && entry.IsFolder) ToggleFolder(key);
+            else ToggleRow(key, ticked);
+        }
 
         // Applies the tick rules to each row, then refreshes the list once for the whole batch.
         void SetTickedRows(IEnumerable<string> rowPaths, bool ticked)
@@ -365,8 +444,8 @@ namespace UnityGit.UI
         List<int> SelectedIndices()
         {
             var indices = new List<int>(_selected.Count);
-            for (var i = 0; i < _rows.Count; i++)
-                if (_selected.Contains(_rows[i])) indices.Add(i);
+            for (var i = 0; i < _entries.Count; i++)
+                if (_selected.Contains(_entries[i].Key)) indices.Add(i);
             return indices;
         }
 
@@ -376,7 +455,7 @@ namespace UnityGit.UI
             if (_syncingSelection) return;
             _selected.Clear();
             foreach (var i in _list.selectedIndices)
-                if (i >= 0 && i < _rows.Count) _selected.Add(_rows[i]);
+                if (i >= 0 && i < _entries.Count) _selected.Add(_entries[i].Key);
             UpdatePreview();
         }
 
@@ -389,6 +468,7 @@ namespace UnityGit.UI
             string? note = null;
             if (selected.Count == 0) note = PreviewText.SelectFile;
             else if (selected.Count > 1) note = PreviewText.Selected(selected.Count);
+            else if (_entryByKey[selected[0]].IsFolder) note = PreviewText.Selected(_entryByKey[selected[0]].Files.Count);
             else if (_byPath[selected[0]].IsConflicted) note = PreviewText.Conflicted;
             if (note != null)
             {
@@ -479,19 +559,34 @@ namespace UnityGit.UI
             _submit.tooltip = availability.Reason ?? string.Empty;
         }
 
-        // Rows are recycled, so every part of the row is set here.
+        // Rows are recycled, between files and folders too, so every part of the row is set here.
         void BindRow(VisualElement element, int index)
         {
             var row = (ChangeRow)element;
-            var item = _items[index];
-            row.userData = item.Path;
-            row.Tick.SetValueWithoutNotify(IsTicked(item.Path));
-            row.Tick.SetEnabled(IsTickable(item.Path));
-            EditorUiElements.SetBadge(row.Kind, BadgeText(item.Kind), KindTone(item.Kind));
-            row.Kind.tooltip = item.Kind.ToString();
-            row.Path.text = item.Path;
-            row.Path.tooltip = item.Path;
-            PanelParts.SetDisplayed(row.Meta, item.HasMeta);
+            var entry = _entries[index];
+            row.userData = entry.Key;
+            row.Path.text = entry.Label;
+            row.Path.tooltip = entry.Label;
+            PanelParts.SetDisplayed(row.FolderIcon, entry.IsFolder);
+            PanelParts.SetDisplayed(row.Kind, !entry.IsFolder);
+
+            if (entry.Item is ChangeItem item)
+            {
+                row.Tick.SetValueWithoutNotify(IsTicked(item.Path));
+                row.Tick.showMixedValue = false;
+                row.Tick.SetEnabled(IsTickable(item.Path));
+                EditorUiElements.SetBadge(row.Kind, BadgeText(item.Kind), KindTone(item.Kind));
+                row.Kind.tooltip = item.Kind.ToString();
+                PanelParts.SetDisplayed(row.Meta, item.HasMeta);
+                return;
+            }
+
+            // A folder: its box follows the files under it. Value first, then the mixed mark, as UpdateHeader does.
+            var tick = FolderTick(entry.Key);
+            row.Tick.SetValueWithoutNotify(tick == true);
+            row.Tick.showMixedValue = tick == null;
+            row.Tick.SetEnabled(!_merging && entry.Files.Any(IsTickable));
+            PanelParts.SetDisplayed(row.Meta, entry.MetaRow != null);
         }
 
         static string BadgeText(ChangeKind kind)
@@ -509,10 +604,14 @@ namespace UnityGit.UI
             }
         }
 
-        /// <summary>A change row: checkbox, kind badge, path and a ".meta" chip when the asset's .meta is paired with it.</summary>
+        /// <summary>
+        /// A change row: checkbox, kind badge (a folder icon on a folder row), path and a ".meta" chip when the asset's .meta,
+        /// or the folder's, is part of the row.
+        /// </summary>
         sealed class ChangeRow : VisualElement
         {
             public readonly Toggle Tick = new Toggle();
+            public readonly Image FolderIcon = new Image { scaleMode = ScaleMode.ScaleToFit, pickingMode = PickingMode.Ignore };
             public readonly Label Kind = EditorUiElements.Badge(string.Empty, EditorUiTone.Neutral);
             public readonly Label Path = PanelParts.Text(null, PanelClasses.Ellipsis, PanelClasses.Path, "unitygit-change-path");
             public readonly Label Meta = EditorUiElements.Chip(".meta");
@@ -520,14 +619,17 @@ namespace UnityGit.UI
             public ChangeRow(ChangesPanel panel)
             {
                 AddToClassList(PanelClasses.Row);
+                FolderIcon.image = GitIcons.LoadFolder();
+                FolderIcon.AddToClassList(GitIcons.FolderIconClass);
                 Kind.AddToClassList("unitygit-kind-badge");
+                Meta.AddToClassList("unitygit-change-meta");
                 // Not focusable, so Space always reaches the list (ToggleSelection) instead of also toggling a focused box.
                 // A click still works: the box's Clickable handles it and stops the pointer events there, so the list's
                 // selection is left as it was and ToggleRow sees it.
                 Tick.focusable = false;
                 Tick.RegisterValueChangedCallback(e =>
                 {
-                    if (userData is string path) panel.ToggleRow(path, e.newValue);
+                    if (userData is string key) panel.OnRowTick(key, e.newValue);
                 });
                 // Rows are recycled, so the path is read when the menu opens.
                 this.AddManipulator(new ContextualMenuManipulator(e =>
@@ -535,6 +637,7 @@ namespace UnityGit.UI
                     if (userData is string path) panel.PopulateRowMenu(e.menu, path);
                 }));
                 Add(Tick);
+                Add(FolderIcon);
                 Add(Kind);
                 Add(Path);
                 Add(Meta);
