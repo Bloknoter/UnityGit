@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using UnityEditor;
+using UnityEditor.UIElements;
 using UnityEngine.UIElements;
 using UnityGit.UI.Theme;
 
@@ -36,6 +37,7 @@ namespace UnityGit.UI
         readonly string _project;
         readonly DropdownField _files;
         readonly ToggleButtonGroup _modeGroup;
+        readonly ToolbarMenu _addRule;
         readonly Button _undo;
         readonly Toggle _autoSaveToggle;
         readonly Button _save;
@@ -91,6 +93,10 @@ namespace UnityGit.UI
             _modeGroup.Add(new Button { text = GitignoreText.Blocks });
             _modeGroup.Add(new Button { text = GitignoreText.PlainText });
             _modeGroup.RegisterValueChangedCallback(e => Mode = e.newValue[(int)GitignoreMode.PlainText] ? GitignoreMode.PlainText : GitignoreMode.Blocks);
+            _addRule = new ToolbarMenu { name = UiNames.GitignoreAddRule, text = GitignoreText.AddRule };
+            foreach (var kind in new[] { GitignoreRuleKind.Extension, GitignoreRuleKind.Folder, GitignoreRuleKind.File, GitignoreRuleKind.Custom })
+                _addRule.menu.AppendAction(GitignoreText.KindName(kind), _ => OpenAddRule(kind),
+                    _ => IsReadOnly ? DropdownMenuAction.Status.Disabled : DropdownMenuAction.Status.Normal);
             _undo = new Button(Undo) { name = UiNames.GitignoreUndo, text = GitignoreText.Undo };
             _autoSaveToggle = new Toggle(GitignoreText.AutoSave) { name = UiNames.GitignoreAutoSave };
             _autoSaveToggle.AddToClassList("unitygit-gitignore-auto-save");
@@ -99,6 +105,7 @@ namespace UnityGit.UI
             _save.AddToClassList(EditorUiClasses.ButtonPrimary);
             toolbar.Add(_files);
             toolbar.Add(_modeGroup);
+            toolbar.Add(_addRule);
             toolbar.Add(_undo);
             toolbar.Add(EditorUiElements.ToolbarSpacer());
             toolbar.Add(_autoSaveToggle);
@@ -238,6 +245,21 @@ namespace UnityGit.UI
         {
             var moved = GitignoreDocument.Parse(_text).Move(block, position);
             if (moved != null) ReplaceText(moved.ToText(), undoable: true);
+        }
+
+        /// <summary>Add rule: the rule's lines go at the end of the file (spec "Edits").</summary>
+        internal void AddLines(IReadOnlyList<string> lines)
+            => ReplaceText(GitignoreDocument.Parse(_text).Append(lines).ToText(), undoable: true);
+
+        // The window adds to the file it was opened for, with paths relative to that file's folder.
+        void OpenAddRule(GitignoreRuleKind kind)
+        {
+            var target = _fullPath;
+            if (target == null || IsReadOnly) return;
+            GitignoreRuleWindow.Open(kind, Path.GetDirectoryName(target)!, _project, lines =>
+            {
+                if (_fullPath == target) AddLines(lines);
+            });
         }
 
         /// <summary>Puts back the text from before the last ×, drop or Add rule, and saves it when auto-save is on.</summary>
@@ -591,6 +613,7 @@ namespace UnityGit.UI
             PanelParts.SetDisplayed(_reload, reload);
 
             _undo.SetEnabled(CanUndo);
+            _addRule.SetEnabled(!IsReadOnly);
             PanelParts.SetDisplayed(_body, _fullPath != null);
             var blocks = Mode == GitignoreMode.Blocks;
             PanelParts.SetDisplayed(BlocksView, blocks);

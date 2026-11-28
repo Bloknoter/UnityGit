@@ -40,6 +40,19 @@ namespace UnityGit.UI
         public static string Unsaved(string path) => $"{path} has unsaved changes.";
 
         public static string WindowTitle(string item) => "Add rule — " + item;
+
+        /// <summary>The Add rule menu item for a kind, which the window's title repeats.</summary>
+        public static string KindName(GitignoreRuleKind kind)
+        {
+            switch (kind)
+            {
+                case GitignoreRuleKind.Extension: return ByExtension;
+                case GitignoreRuleKind.Folder: return AllInFolder;
+                case GitignoreRuleKind.File: return SpecificFile;
+                default: return Custom;
+            }
+        }
+
         public const string Comment = "Comment (optional)";
         public const string Extension = "Extension";
         public const string Folder = "Folder";

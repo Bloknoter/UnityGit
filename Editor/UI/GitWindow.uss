@@ -1131,3 +1131,45 @@
     margin-top: -1px;
     background-color: var(--ed-accent);
 }
+
+/* The Add rule window: the fields stacked, the value and its Browse button on one row, Cancel and Add at the bottom right. */
+
+.unitygit-gitignore-rule-window {
+    padding-left: var(--ed-space-3);
+    padding-right: var(--ed-space-3);
+    padding-top: var(--ed-space-3);
+    padding-bottom: var(--ed-space-3);
+    background-color: var(--ed-bg);
+}
+
+.unitygit-gitignore-rule-form {
+    flex-grow: 1;
+}
+
+.unitygit-gitignore-rule-value {
+    flex-direction: row;
+    align-items: flex-start;
+}
+
+.unitygit-window .unitygit-gitignore-rule-custom > .unity-base-text-field__input {
+    min-height: 54px;
+    -unity-font-definition: resource("Fonts/RobotoMono/RobotoMono-Regular SDF.asset");
+}
+
+.unitygit-gitignore-rule-hint,
+.unitygit-gitignore-rule-error {
+    margin-left: var(--ed-space-1);
+    margin-top: var(--ed-space-1);
+    white-space: normal;
+}
+
+.unitygit-window .unitygit-gitignore-rule-error {
+    color: var(--ed-error-text);
+}
+
+.unitygit-gitignore-rule-buttons {
+    flex-direction: row;
+    justify-content: flex-end;
+    margin-top: auto;
+    padding-top: var(--ed-space-2);
+}

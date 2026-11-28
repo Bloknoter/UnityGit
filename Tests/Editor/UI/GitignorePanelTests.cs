@@ -466,5 +466,19 @@ namespace UnityGit.Tests
 
             Assert.That(p.CanUndo, Is.False);
         }
+
+        // ---- Add rule ----
+
+        [Test]
+        public async Task Panel_AddLines_AppendsAndSaves()
+        {
+            var (repo, s) = await RepoAsync();
+            var p = await PanelAsync(s);
+
+            p.AddLines(new[] { "# PSDs", "*.psd" });
+
+            Assert.That(Disk(repo), Is.EqualTo(Original + "\n# PSDs\n*.psd\n"));
+            Assert.That(p.CanUndo, Is.True);
+        }
     }
 }

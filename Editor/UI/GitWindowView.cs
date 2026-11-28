@@ -21,7 +21,7 @@ namespace UnityGit.UI
     public sealed class GitWindowView : VisualElement
     {
         const string GitDownloadUrl = "https://git-scm.com/downloads";
-        const string LayoutSheetPath = "Packages/com.bloknoter.unitygit/Editor/UI/GitWindow.uss";
+        internal const string LayoutSheetPath = "Packages/com.bloknoter.unitygit/Editor/UI/GitWindow.uss";
         static readonly WindowTab[] Tabs = (WindowTab[])Enum.GetValues(typeof(WindowTab));
 
         readonly GitSession _session;
