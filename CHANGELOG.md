@@ -6,7 +6,7 @@
 
 - **.gitignore** tab: edit any `.gitignore` in the repository, picked from a dropdown, as plain text or as blocks. Blocks keep comments and rules apart, show the file's line numbers, give comments a background of their own, and can be dragged to reorder or removed with ×. **Undo** steps back through those edits.
 - **Add rule**: by extension, all in a folder, a specific file (typed or picked with Browse…), or a custom rule, each with an optional comment. **Negate** re-includes; **Also ignore .meta** (on by default) adds the matching `.meta` rule. Paths are anchored to the `.gitignore`'s folder and escaped.
-- **Auto-save** (on by default, remembered), or a **Save** button when it's off. Unsaved text survives a script reload, closing the window asks to save, and a file changed on disk under unsaved text is never overwritten unseen. Line endings and a BOM are kept.
+- **Auto-save** (on by default, remembered), or a **Save** button when it's off. Unsaved text survives a script reload, closing the window asks to save, and a file changed or deleted on disk under unsaved text is never overwritten or brought back unseen. Line endings and a BOM are kept.
 
 ## [1.5.1] - 2026-11-28
 

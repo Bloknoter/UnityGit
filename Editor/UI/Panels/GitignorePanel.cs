@@ -59,12 +59,13 @@ namespace UnityGit.UI
         string _baseline = string.Empty;
         GitignoreFileText? _stamp;       // the disk version the baseline came from; null when unknown (a restored draft)
         GitignoreFileText? _diskVersion; // a newer disk version found under unsaved edits
+        bool _goneFromDisk;              // the file was deleted under unsaved edits
         bool _hasBom;
         string _lineEnding = "\n";
         bool _isUtf8 = true;
         string? _saveError;
-        bool _saveBlocked;               // an auto-save waited for a git action to end
-        (bool, bool)? _reported;         // (HasUnsavedChanges, AutoSave) last told through UnsavedChanged
+        bool _saveBlocked;               // an auto-save waits: for a git action to end, or a restored draft for the repo
+        bool? _reported;                 // ReportsUnsavedChanges as last told through UnsavedChanged
         string? _noteText;
         RepoSnapshot? _seen;
         IVisualElementScheduledItem? _pendingSave;
@@ -195,7 +196,7 @@ namespace UnityGit.UI
             }
         }
 
-        /// <summary>Raised when <see cref="HasUnsavedChanges"/> or <see cref="AutoSave"/> changes.</summary>
+        /// <summary>Raised when <see cref="ReportsUnsavedChanges"/> changes.</summary>
         public event Action? UnsavedChanged;
 
         bool IsConflicted => _filePath != null && _session.Snapshot.ConflictedPaths.Contains(_filePath);
@@ -209,7 +210,8 @@ namespace UnityGit.UI
                 CheckDisk(); // before an auto-save that waited, so it can't overwrite what the action wrote
                 _ = ReloadAsync();
             }
-            if (_saveBlocked && !_session.IsBusy) FlushPendingSave();
+            // A conflicted file is known only once the repo is read, so a restored draft waits for that too.
+            if (_saveBlocked && !_session.IsBusy && s.Availability == RepoAvailability.Ready) FlushPendingSave();
             RenderState();
         }
 
@@ -272,11 +274,21 @@ namespace UnityGit.UI
             if (AutoSave) FlushPendingSave();
         }
 
-        /// <summary>Saves now when auto-save is on and the text is unsaved, unless the file changed on disk meanwhile.</summary>
+        /// <summary>
+        /// Saves now when auto-save is on and the text is unsaved, unless the file changed or went on disk meanwhile. The
+        /// disk is checked first: an outside change doesn't always come with a new snapshot.
+        /// </summary>
         internal void FlushPendingSave()
         {
             _pendingSave?.Pause();
-            if (AutoSave && HasUnsavedChanges && !IsReadOnly && _diskVersion == null) Save();
+            if (!AutoSave || !HasUnsavedChanges || IsReadOnly)
+            {
+                _saveBlocked = false; // nothing left for auto-save to do
+                NotifyUnsaved();
+                return;
+            }
+            CheckDisk();
+            if (_diskVersion == null && !_goneFromDisk) Save();
         }
 
         /// <summary>Writes the text in the file's own format. False when it failed (the message says why) or a git action runs.</summary>
@@ -286,6 +298,7 @@ namespace UnityGit.UI
             if (_session.IsBusy)
             {
                 _saveBlocked = true;
+                NotifyUnsaved();
                 return false;
             }
             _saveBlocked = false;
@@ -303,6 +316,7 @@ namespace UnityGit.UI
             _stamp = GitignoreFile.Read(_fullPath);
             _baseline = _text;
             _diskVersion = null;
+            _goneFromDisk = false;
             _saveError = null;
             EraseDraft();
             NotifyUnsaved();
@@ -313,7 +327,8 @@ namespace UnityGit.UI
 
         /// <summary>
         /// Reads the file again when its time or length changed. Same content: nothing to do. No unsaved edits: the new text
-        /// replaces the old. Unsaved edits: they stay and a warning offers Reload.
+        /// replaces the old, and a deleted file leaves it to the file list. Unsaved edits: they stay, auto-save holds off,
+        /// and a warning offers Reload (Save keeps them).
         /// </summary>
         internal void CheckDisk()
         {
@@ -322,9 +337,12 @@ namespace UnityGit.UI
             var disk = GitignoreFile.Read(_fullPath);
             if (disk == null)
             {
-                _ = ReloadAsync(); // gone: the file list decides what's shown
+                if (HasUnsavedChanges) _goneFromDisk = true;
+                else if (!_reloading) _ = ReloadAsync(); // the file list decides what's shown; a reload in progress does
+                RenderState();
                 return;
             }
+            _goneFromDisk = false;
             _hasBom = disk.HasBom;
             _lineEnding = disk.LineEnding;
             _isUtf8 = disk.IsUtf8;
@@ -338,7 +356,9 @@ namespace UnityGit.UI
         internal void Reload()
         {
             if (_fullPath == null) return;
-            TakeDisk(GitignoreFile.Read(_fullPath));
+            var disk = GitignoreFile.Read(_fullPath);
+            TakeDisk(disk);
+            if (disk == null) _ = ReloadAsync(); // deleted: the file list decides what's shown
             RenderState();
         }
 
@@ -401,8 +421,17 @@ namespace UnityGit.UI
             return Task.FromResult(true);
         }
 
-        /// <summary>What the window reports to Unity's close prompt: unsaved text that auto-save won't save.</summary>
-        internal bool ReportsUnsavedChanges => !AutoSave && HasUnsavedChanges;
+        // Auto-save is on but holds off: the file changed or went on disk under the edits, or the last write failed.
+        bool AutoSaveHeld => _diskVersion != null || _goneFromDisk || _saveError != null;
+
+        // Save shows while there's unsaved text auto-save won't save.
+        bool ShowsSave => HasUnsavedChanges && (!AutoSave || AutoSaveHeld);
+
+        /// <summary>
+        /// What the window reports to Unity's close prompt: unsaved text that auto-save won't save, or that still waits
+        /// for a git action to end.
+        /// </summary>
+        internal bool ReportsUnsavedChanges => ShowsSave || (HasUnsavedChanges && _saveBlocked);
 
         /// <summary>Drops the unsaved text: back to the baseline.</summary>
         internal void Discard()
@@ -410,6 +439,7 @@ namespace UnityGit.UI
             _pendingSave?.Pause();
             _text = _baseline;
             _diskVersion = null;
+            _goneFromDisk = false;
             EraseDraft();
             NotifyUnsaved();
             RenderState();
@@ -459,8 +489,10 @@ namespace UnityGit.UI
         {
             if (_session.Snapshot.Availability != RepoAvailability.Ready) return; // a session still loading knows no files
             var files = (await _session.ListGitignoreFilesAsync()).ToList();
-            // A file with unsaved edits stays listed even when it's gone from disk: saving brings it back.
-            if (_filePath != null && !files.Contains(_filePath) && HasUnsavedChanges) files.Add(_filePath);
+            // The selected file stays listed while it's on disk, since a nested one may now ignore itself, and while it
+            // has unsaved edits, since saving brings it back.
+            if (_filePath != null && !files.Contains(_filePath) && (HasUnsavedChanges || (_fullPath != null && File.Exists(_fullPath))))
+                files.Add(_filePath);
             _fileList = files;
             _listLoaded = true;
             if (_filePath != null && files.Contains(_filePath))
@@ -509,6 +541,7 @@ namespace UnityGit.UI
             _lineEnding = disk?.LineEnding ?? "\n";
             _isUtf8 = disk?.IsUtf8 ?? true;
             _diskVersion = null;
+            _goneFromDisk = false;
             _saveError = null;
             _pendingSave?.Pause();
             _undoStack.Clear(); // a reload, a file switch or another file read
@@ -544,6 +577,7 @@ namespace UnityGit.UI
                 _lineEnding = disk.LineEnding;
                 _isUtf8 = disk.IsUtf8;
             }
+            _saveBlocked = AutoSave; // a save that didn't happen before the reload: Render makes it once the repo is read
         }
 
         void StoreDraft()
@@ -562,7 +596,7 @@ namespace UnityGit.UI
 
         void NotifyUnsaved()
         {
-            var now = (HasUnsavedChanges, AutoSave);
+            var now = ReportsUnsavedChanges;
             if (_reported == now) return;
             _reported = now;
             UnsavedChanged?.Invoke();
@@ -582,7 +616,7 @@ namespace UnityGit.UI
             mode[(int)Mode] = true;
             _modeGroup.SetValueWithoutNotify(mode);
             _autoSaveToggle.SetValueWithoutNotify(AutoSave);
-            PanelParts.SetDisplayed(_save, !AutoSave && HasUnsavedChanges);
+            PanelParts.SetDisplayed(_save, ShowsSave);
             _save.SetEnabled(!IsReadOnly);
 
             string? note = null;
@@ -599,6 +633,11 @@ namespace UnityGit.UI
             }
             else if (IsConflicted) (note, tone) = (GitignoreText.Conflicted, EditorUiTone.Warning);
             else if (!_isUtf8) (note, tone) = (GitignoreText.NotUtf8, EditorUiTone.Warning);
+            else if (_goneFromDisk)
+            {
+                (note, tone) = (GitignoreText.DeletedOnDisk, EditorUiTone.Warning);
+                reload = true;
+            }
             else if (_diskVersion != null)
             {
                 (note, tone) = (GitignoreText.ChangedOnDisk, EditorUiTone.Warning);
@@ -633,6 +672,7 @@ namespace UnityGit.UI
                 _blocksText = _text;
                 _blocksReadOnly = readOnly;
             }
+            NotifyUnsaved(); // the held states that decide it change with the ones shown here
         }
     }
 }

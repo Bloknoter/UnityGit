@@ -166,8 +166,9 @@ namespace UnityGit
         // The path below the folder with '/', or null when it isn't strictly inside it.
         static string? RelativeInside(string full, string folder)
         {
-            var relative = Relative(full, folder);
-            return relative == null || relative == "." ? null : relative.Replace('\\', '/');
+            // A typed "Assets/Foo/" keeps its trailing separator through GetRelativePath; the pattern adds its own.
+            var relative = Relative(full, folder)?.Replace('\\', '/').TrimEnd('/');
+            return string.IsNullOrEmpty(relative) || relative == "." ? null : relative;
         }
 
         static bool IsInsideOrEqual(string full, string folder) => Relative(full, folder) != null;

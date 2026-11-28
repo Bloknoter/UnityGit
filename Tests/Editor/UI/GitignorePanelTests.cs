@@ -480,5 +480,121 @@ namespace UnityGit.Tests
             Assert.That(Disk(repo), Is.EqualTo(Original + "\n# PSDs\n*.psd\n"));
             Assert.That(p.CanUndo, Is.True);
         }
+
+        // ---- final review: held auto-saves, deleted files, files that ignore themselves ----
+
+        const string Deleted = "This .gitignore was deleted on disk. Save puts it back with your edits; Reload drops them";
+
+        [Test]
+        public async Task Panel_DeletedWithUnsavedEdits_WarnsAndSaveRestores()
+        {
+            var (repo, s) = await RepoAsync();
+            var p = await PanelAsync(s);
+            p.AutoSave = false;
+            p.SetPlainText("mine\n");
+
+            File.Delete(GitignorePath(repo)); // a branch switch, Revert or Explorer
+            await s.RefreshAsync();
+            p.Render();
+            var settled = await Task.WhenAny(p.Loaded, Task.Delay(10000)) == p.Loaded;
+            if (!settled) p.Discard(); // ends an endless reload, which would otherwise spin once the session is disposed
+
+            Assert.That(settled, Is.True, "the reload settles");
+            Assert.That(p.NoteText, Is.EqualTo(Deleted));
+            Assert.That(IsDisplayed(p.Q<Button>(UiNames.GitignoreReload)), Is.True);
+            Assert.That((p.FilePath, p.Text), Is.EqualTo((".gitignore", "mine\n")));
+            Assert.That(p.Save(), Is.True);
+            Assert.That(Disk(repo), Is.EqualTo("mine\n"));
+            Assert.That(p.NoteText, Is.Null);
+        }
+
+        [Test]
+        public async Task Panel_DeletedUnderPendingAutoSave_NotRecreated()
+        {
+            var (repo, s) = await RepoAsync();
+            var p = await PanelAsync(s);
+            p.SetPlainText("mine\n"); // auto-save waits for typing to stop
+
+            File.Delete(GitignorePath(repo));
+            p.FlushPendingSave();
+
+            Assert.That(File.Exists(GitignorePath(repo)), Is.False, "auto-save doesn't bring back a file deleted meanwhile");
+            Assert.That(p.NoteText, Is.EqualTo(Deleted));
+            Assert.That(IsDisplayed(p.Q<Button>(UiNames.GitignoreSave)), Is.True, "Save is the way to keep the edits");
+            Assert.That(p.ReportsUnsavedChanges, Is.True, "closing asks");
+        }
+
+        [Test]
+        public async Task View_ChangedOnDiskWithAutoSave_ReportsUnsaved()
+        {
+            var (repo, s) = await RepoAsync();
+            var v = new GitWindowView(s);
+            v.SelectTab(WindowTab.Gitignore);
+            var p = v.Q<GitignorePanel>();
+            await p.Loaded;
+            p.SetPlainText("mine\n");
+            Assert.That(v.HasUnsavedChanges, Is.False, "setup: auto-save will save it");
+            var raised = 0;
+            v.UnsavedChanged += () => raised++;
+
+            File.WriteAllText(GitignorePath(repo), "theirs\n");
+            p.CheckDisk();
+
+            Assert.That(p.NoteText, Is.EqualTo("This .gitignore changed on disk"), "setup");
+            Assert.That(v.HasUnsavedChanges, Is.True, "auto-save won't overwrite the disk version, so closing asks");
+            Assert.That(raised, Is.GreaterThan(0));
+            Assert.That(IsDisplayed(p.Q<Button>(UiNames.GitignoreSave)), Is.True);
+        }
+
+        [Test]
+        public async Task Panel_SaveFailsWithAutoSave_ReportsUnsaved()
+        {
+            var (repo, s) = await RepoAsync();
+            var p = await PanelAsync(s);
+            File.SetAttributes(GitignorePath(repo), FileAttributes.ReadOnly);
+            try
+            {
+                p.ReplaceText("mine\n", false); // auto-save writes at once
+
+                Assert.That(Disk(repo), Is.EqualTo(Original), "setup: the write failed");
+                Assert.That(p.ReportsUnsavedChanges, Is.True);
+            }
+            finally
+            {
+                File.SetAttributes(GitignorePath(repo), FileAttributes.Normal);
+            }
+        }
+
+        [Test]
+        public async Task Panel_RestoredDraftWithAutoSave_Saves()
+        {
+            var (repo, s) = await RepoAsync();
+            var p = await PanelAsync(s);
+            p.AutoSave = false;
+            p.SetPlainText("draft\n"); // kept as when a git action held the save before a script reload
+            EditorPrefs.SetBool(GitignorePanel.AutoSavePref, true);
+
+            var again = await PanelAsync(s);
+
+            Assert.That(Disk(repo), Is.EqualTo("draft\n"));
+            Assert.That(again.HasUnsavedChanges, Is.False);
+        }
+
+        [Test]
+        public async Task Panel_FileThatNowIgnoresItself_StaysSelected()
+        {
+            var (repo, s) = await RepoAsync();
+            GitSandbox.WriteFile(repo, "a/.gitignore", "x\n"); // untracked
+            await s.RefreshAsync();
+            var p = await PanelAsync(s);
+            Assert.That(await p.SelectFileAsync("a/.gitignore"), Is.True, "setup");
+
+            p.ReplaceText("*\n", false); // saved at once: git now ignores a/.gitignore itself
+            await s.RefreshAsync();
+            p.Render();
+            await p.Loaded;
+
+            Assert.That((p.FilePath, p.Text), Is.EqualTo(("a/.gitignore", "*\n")));
+        }
     }
 }

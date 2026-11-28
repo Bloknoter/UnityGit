@@ -70,6 +70,12 @@ namespace UnityGit.Tests
                 Assert.That(Build(GitignoreRuleKind.Folder, value).Lines, Is.EqualTo(new[] { "/Assets/Foo/", "/Assets/Foo.meta" }), value);
         }
 
+        [Test] public void Build_Folder_TrailingSlash()
+        {
+            foreach (var value in new[] { "Assets/Foo/", @"Assets\Foo\", "/Assets/Foo/", Path.Combine(F, "Assets", "Foo") + Path.DirectorySeparatorChar })
+                Assert.That(Build(GitignoreRuleKind.Folder, value).Lines, Is.EqualTo(new[] { "/Assets/Foo/", "/Assets/Foo.meta" }), value);
+        }
+
         [Test] public void Build_Folder_RelativeToNestedGitignore()
         {
             var game = Path.Combine(F, "Game");

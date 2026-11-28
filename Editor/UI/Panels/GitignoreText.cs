@@ -24,6 +24,7 @@ namespace UnityGit.UI
         public const string Conflicted = "Resolve this file in the Conflicts tab first";
         public const string NotUtf8 = "This file isn't UTF-8 text, so it can't be edited here";
         public const string ChangedOnDisk = "This .gitignore changed on disk";
+        public const string DeletedOnDisk = "This .gitignore was deleted on disk. Save puts it back with your edits; Reload drops them";
         public const string Reload = "Reload";
         public const string EmptyFile = "Empty file — add a rule, or type in Plain text";
         public const string Remove = "Remove";

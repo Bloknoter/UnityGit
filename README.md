@@ -92,8 +92,8 @@ The .gitignore tab edits the repository's ignore rules. The dropdown lists every
   - **Custom**: the rule as typed, any number of lines (Ctrl+Enter adds).
   - **Negate** puts `!` in front, which re-includes what an earlier rule ignored. Git can't re-include a file whose parent folder is ignored.
   - **Also ignore .meta** (on by default, for assets in `Assets/` or `Packages/`, and for extensions) adds the matching `.meta` rule, so other machines don't get a `.meta` with no asset.
-- **Auto-save** (on by default, remembered) saves each change at once, and typing after a second's pause. With it off, **Save** appears while there are unsaved changes. Unsaved text survives a script reload; closing the window asks to save, and so does opening another `.gitignore`.
-- Nothing is saved while a git action runs. If the file changes on disk (a pull, another editor) while you have unsaved changes, the tab says so and offers **Reload**; saving instead keeps your version. Without unsaved changes it reloads by itself.
+- **Auto-save** (on by default, remembered) saves each change at once, and typing after a second's pause. With it off, or while it holds off (below), **Save** appears while there are unsaved changes. Unsaved text survives a script reload; closing the window asks to save it, and so does opening another `.gitignore`.
+- Nothing is saved while a git action runs. If the file changes on disk or is deleted (a pull, a branch switch, another editor) while you have unsaved changes, auto-save holds off and the tab says so: **Reload** takes the disk's version, **Save** keeps yours. Without unsaved changes it reloads by itself.
 - Line endings, a UTF-8 BOM and a missing final newline are kept as they were. A conflicted `.gitignore` is read-only until it's resolved in Conflicts, and so is one that isn't UTF-8 text.
 - After a save, Changes is refreshed, so newly ignored files leave the list.
 
