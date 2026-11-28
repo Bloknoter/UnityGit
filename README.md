@@ -31,6 +31,7 @@ The window has an action toolbar (branch dropdown, Commit, Fetch, Pull, Push, Re
 - **Branches**: local and remote branches; double-click to switch.
 - **History**: recent commits on the current branch.
 - **Authors**: names, emails and commit counts.
+- **.gitignore**: the repository's ignore rules, as text or as blocks to move and remove, with an Add rule menu. See **.gitignore** below.
 - **Conflicts**: shown while a file is conflicted or a merge or rebase is in progress. See **Conflicts** below.
 - **More**: tags, stashes, LFS details and locks.
 - **Updates**: newer releases of UnityGit and FlexGit, Update buttons and every older release. See **Updates** below.
@@ -75,6 +76,26 @@ The Conflicts tab appears while a file is conflicted or a merge or rebase is in 
 - Conflicts from a cherry-pick, revert or stash apply can have their files resolved here, but finishing or aborting the operation is done outside UnityGit.
 - Scenes and prefabs show a warning: picking places one by one can break them.
 - Pending choices are not kept across a script reload. The selected tab is.
+
+## .gitignore
+
+The .gitignore tab edits the repository's ignore rules. The dropdown lists every `.gitignore` in the repository, nested ones too, and opens the Unity project folder's first. If the repository has none, the tab offers **Create with Unity template** and **Create empty**; the file goes in the Unity project folder and never replaces an existing one.
+
+- **Plain text**: the file in a text box with its line numbers.
+- **Blocks**: the file as blocks, with the same line numbers and background as the change preview. Comments and rules are always separate blocks. A block of rules runs until the next comment, so blank lines between rules stay in it. A comment block splits where two blank lines separate it. Comment blocks have a background of their own. Text can't be typed here; switch to Plain text for that.
+  - **×** at a block's top right removes all its lines.
+  - Drag a block to move it between other blocks. A line shows where it will land; Escape cancels. Two separate comments stay separate; two blocks of rules that end up next to each other become one, since only a comment separates rules.
+  - **Undo** steps back through removals, moves and added rules since the file was opened, even after they were saved.
+- **Add rule** writes a rule with an optional comment above it:
+  - **By extension**: `psd`, `.psd` or `*.psd` gives `*.psd`.
+  - **All in folder** and **Specific file**: type a path or pick one with **Browse…**. The rule is anchored to the `.gitignore`'s folder (`/Assets/Art/`, `/Assets/notes.txt`), and characters like `[` in the name are escaped, so it matches exactly that folder or file. The path must be inside the `.gitignore`'s folder.
+  - **Custom**: the rule as typed, any number of lines (Ctrl+Enter adds).
+  - **Negate** puts `!` in front, which re-includes what an earlier rule ignored. Git can't re-include a file whose parent folder is ignored.
+  - **Also ignore .meta** (on by default, for assets in `Assets/` or `Packages/`, and for extensions) adds the matching `.meta` rule, so other machines don't get a `.meta` with no asset.
+- **Auto-save** (on by default, remembered) saves each change at once, and typing after a second's pause. With it off, **Save** appears while there are unsaved changes. Unsaved text survives a script reload; closing the window asks to save, and so does opening another `.gitignore`.
+- Nothing is saved while a git action runs. If the file changes on disk (a pull, another editor) while you have unsaved changes, the tab says so and offers **Reload**; saving instead keeps your version. Without unsaved changes it reloads by itself.
+- Line endings, a UTF-8 BOM and a missing final newline are kept as they were. A conflicted `.gitignore` is read-only until it's resolved in Conflicts, and so is one that isn't UTF-8 text.
+- After a save, Changes is refreshed, so newly ignored files leave the list.
 
 ## Updates
 
