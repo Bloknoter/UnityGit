@@ -129,14 +129,37 @@ namespace UnityGit.Tests
             }
         }
 
+        // Only the visible files are ticked by hand: the folded A.meta has no box, so ticking a file under A ticks it too.
         [Test] public async Task FolderFollowsTicksMadeOnItsFiles()
         {
             var p = Panel((await SessionWithFilesAsync(Files)).s);
             p.SetTicked(A, false);
 
-            foreach (var f in new[] { "Assets/A.meta", "Assets/A/B/y.txt", "Assets/A/x.txt" }) p.SetTicked(f, true);
+            foreach (var f in new[] { "Assets/A/B/y.txt", "Assets/A/x.txt" }) p.SetTicked(f, true);
 
             Assert.That((p.FolderTick(A), p.FolderTick(Assets)), Is.EqualTo(((bool?)true, (bool?)true)));
+            Assert.That(p.IsTicked("Assets/A.meta"), Is.True);
+        }
+
+        [Test] public async Task TickingAFile_TicksTheFoldedMetaOfEveryFolderAboveIt()
+        {
+            var p = Panel((await SessionWithFilesAsync("Assets/A/B/y.txt", "Assets/A.meta", "Assets/A/B.meta")).s);
+            p.SetTicked(Assets, false);
+
+            p.ToggleRow("Assets/A/B/y.txt", true);
+
+            Assert.That(Ticked(p), Is.EqualTo(new[] { "Assets/A.meta", "Assets/A/B.meta", "Assets/A/B/y.txt" }));
+        }
+
+        [Test] public async Task FoldersHidden_TickingAFile_LeavesTheFolderMetaRowAlone()
+        {
+            var p = Panel((await SessionWithFilesAsync(Files)).s);
+            p.ShowFolders = false;
+            p.SetAllTicked(false);
+
+            p.SetTicked("Assets/A/x.txt", true);
+
+            Assert.That(Ticked(p), Is.EqualTo(new[] { "Assets/A/x.txt" }), "with folders hidden the .meta is a row of its own, as in 1.4.0");
         }
 
         [Test] public async Task FolderBoxClick_FromMixedTicksAll_ThenUnticksAll()

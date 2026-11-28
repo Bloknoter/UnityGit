@@ -57,10 +57,13 @@ namespace UnityGit.UI
         {
             if (!showFolders) return rows.Select(ChangeEntry.ForFile).ToList();
 
+            // The folders a row's path is in. A row may itself end in '/' (git lists an untracked nested repository that way):
+            // it stays a file row, and its key is never also a folder's, so keys stay unique.
             var folders = new HashSet<string>(StringComparer.Ordinal);
             foreach (var row in rows)
-                for (var i = row.Path.IndexOf('/'); i >= 0; i = row.Path.IndexOf('/', i + 1))
+                for (var i = row.Path.IndexOf('/'); i >= 0 && i < row.Path.Length - 1; i = row.Path.IndexOf('/', i + 1))
                     folders.Add(row.Path.Substring(0, i + 1));
+            folders.ExceptWith(rows.Select(r => r.Path));
 
             // A folder's .meta sits beside the folder; it is folded into the folder's line, which ticks it with its contents.
             var metaOf = new Dictionary<string, string>(StringComparer.Ordinal);
@@ -80,7 +83,7 @@ namespace UnityGit.UI
                 // A folded .meta belongs to its folder as well as to the folders its own path is in.
                 var under = folded.TryGetValue(row.Path, out var own) ? own : row.Path;
                 for (var i = under.IndexOf('/'); i >= 0; i = under.IndexOf('/', i + 1))
-                    files[under.Substring(0, i + 1)].Add(row.Path);
+                    if (files.TryGetValue(under.Substring(0, i + 1), out var list)) list.Add(row.Path);
             }
 
             var entries = folders.Select(f => ChangeEntry.ForFolder(f, files[f], metaOf.TryGetValue(f, out var meta) ? meta : null))

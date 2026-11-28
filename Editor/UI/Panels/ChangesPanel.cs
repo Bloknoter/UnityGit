@@ -423,6 +423,23 @@ namespace UnityGit.UI
             return files;
         }
 
+        // These rows plus the folded .meta of every folder above them. A folded .meta has no box of its own, so ticking a file
+        // ticks it: otherwise a folder whose files were all ticked by hand would stay mixed, and a new folder's files could be
+        // committed without its .meta, which gives the folder another GUID on the next machine.
+        List<string> WithFolderMetas(IEnumerable<string> rowPaths)
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var result = new List<string>();
+            foreach (var path in rowPaths)
+            {
+                if (seen.Add(path)) result.Add(path);
+                for (var i = path.IndexOf('/'); i >= 0 && i < path.Length - 1; i = path.IndexOf('/', i + 1))
+                    if (_entryByKey.TryGetValue(path.Substring(0, i + 1), out var folder) && folder.MetaRow is string meta && seen.Add(meta))
+                        result.Add(meta);
+            }
+            return result;
+        }
+
         // A row's checkbox was clicked: a folder follows its own rule, a file takes the box's new value.
         void OnRowTick(string key, bool ticked)
         {
@@ -433,6 +450,7 @@ namespace UnityGit.UI
         // Applies the tick rules to each row, then refreshes the list once for the whole batch.
         void SetTickedRows(IEnumerable<string> rowPaths, bool ticked)
         {
+            if (ticked && _showFolders) rowPaths = WithFolderMetas(rowPaths);
             var changed = false;
             foreach (var path in rowPaths)
             {

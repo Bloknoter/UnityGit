@@ -79,6 +79,16 @@ namespace UnityGit.Tests
             Assert.That(E(e, "Assets/A/").Files, Is.EqualTo(new[] { "Assets/A/x.txt" }));
         }
 
+        // git lists an untracked nested repository as one entry ending in '/', which mustn't become a folder line too.
+        [Test] public void RowEndingInSlash_IsAFileRow_NotAFolder()
+        {
+            var e = ChangeTree.Build(MetaPairing.Group(new[] { C("Assets/Plugins/Lib/", ChangeKind.Untracked), C("Assets/Plugins/Lib.meta", ChangeKind.Untracked) }), true);
+
+            Assert.That(Keys(e), Is.EqualTo(new[] { "Assets/", "Assets/Plugins/", "Assets/Plugins/Lib.meta", "Assets/Plugins/Lib/" }));
+            Assert.That(E(e, "Assets/Plugins/Lib/").IsFolder, Is.False);
+            Assert.That(E(e, "Assets/Plugins/").Files, Is.EqualTo(new[] { "Assets/Plugins/Lib.meta", "Assets/Plugins/Lib/" }));
+        }
+
         [Test] public void RenamedRow_IsPlacedByItsNewPath()
             => Assert.That(Keys(ChangeTree.Build(MetaPairing.Group(new[] { C("New/x.txt", ChangeKind.Renamed, "Old/x.txt") }), true)),
                 Is.EqualTo(new[] { "New/", "New/x.txt" }));
