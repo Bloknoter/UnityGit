@@ -396,6 +396,35 @@ namespace UnityGit.Tests
             Assert.That(Exists("Assets/A.asset.meta"), Is.False);
         }
 
+        // Reverting a whole new folder (what a folder row's Revert does) removes the folders it leaves empty, or Unity would
+        // give each empty folder a new .meta and the folder would show up again.
+        [Test] public async Task Revert_NewFolder_RemovesTheFoldersItEmptied()
+        {
+            var s = await RepoAsync(("README.md", "readme\n"));
+            await WriteAndRefreshAsync(s, ("Assets/New.meta", "m"), ("Assets/New/a.txt", "a"), ("Assets/New/Sub.meta", "m"),
+                ("Assets/New/Sub/b.txt", "b"), ("Assets/keep.txt", "k"));
+
+            var o = await s.RevertAsync(new[] { "Assets/New.meta", "Assets/New/a.txt", "Assets/New/Sub.meta", "Assets/New/Sub/b.txt" });
+
+            AssertOutcome(o, OutcomeKind.Succeeded, "Reverted 4 files");
+            Assert.That(Directory.Exists(FullPath("Assets/New")), Is.False);
+            Assert.That(Exists("Assets/keep.txt"), Is.True, "Assets still holds an unpicked file");
+            Assert.That(Rows(s), Is.EqualTo(new[] { "Assets/keep.txt" }));
+        }
+
+        // A folder whose .meta is still on disk (committed, or not picked) is a folder of the project: it stays, even empty.
+        [Test] public async Task Revert_FilesOfAFolderWithAMeta_KeepsTheFolder()
+        {
+            var s = await RepoAsync(("Assets/Old.meta", "m"));
+            await WriteAndRefreshAsync(s, ("Assets/Old/c.txt", "c"));
+
+            var o = await s.RevertAsync(new[] { "Assets/Old/c.txt" });
+
+            AssertOutcome(o, OutcomeKind.Succeeded, "Reverted 1 file");
+            Assert.That(Directory.Exists(FullPath("Assets/Old")), Is.True);
+            Assert.That(Rows(s), Is.Empty);
+        }
+
         [Test] public async Task Revert_IndexLocked_Fails()
         {
             var s = await RepoAsync(("a.txt", "a\n"));

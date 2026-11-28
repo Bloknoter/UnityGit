@@ -1,6 +1,7 @@
 #nullable enable
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using FlexGit;
@@ -73,6 +74,7 @@ namespace UnityGit
                 () => files.TrackAsync(async () =>
                 {
                     foreach (var batch in batches) await repo.Index.DiscardAsync(batch, deleteUntracked: true);
+                    RemoveEmptiedFolders(repo.WorkingDirectory, targets.SelectMany(t => t.GitPaths).Where(newPaths.Contains));
                     return true;
                 }, _ => false),
                 files);
@@ -84,6 +86,36 @@ namespace UnityGit
         {
             await RefreshAfterActionAsync();
             return Refused(GitAction.Revert, message);
+        }
+
+        // git clean deletes the new files but not the folders they were in. A folder that is left empty and has no .meta beside
+        // it is removed as well, walking up from each deleted file, or Unity would give it a new .meta and it would be listed
+        // again. A folder whose .meta is still on disk (committed, or not picked) belongs to the project and stays.
+        static void RemoveEmptiedFolders(string root, IEnumerable<string> deletedPaths)
+        {
+            foreach (var path in deletedPaths)
+            {
+                for (var dir = ParentOf(path); dir.Length > 0; dir = ParentOf(dir))
+                {
+                    var full = Path.Combine(root, dir);
+                    if (!Directory.Exists(full)) continue; // removed by an earlier walk
+                    try
+                    {
+                        if (Directory.EnumerateFileSystemEntries(full).Any() || File.Exists(full + MetaPairing.MetaSuffix)) break;
+                        Directory.Delete(full);
+                    }
+                    catch (IOException) { break; }
+                    catch (UnauthorizedAccessException) { break; }
+                }
+            }
+        }
+
+        // "a/b/c.txt" → "a/b"; "a/b/" (a nested repository's entry) → "a"; "c.txt" → "".
+        static string ParentOf(string path)
+        {
+            var trimmed = path.TrimEnd('/');
+            var slash = trimmed.LastIndexOf('/');
+            return slash < 0 ? string.Empty : trimmed.Substring(0, slash);
         }
 
         static IEnumerable<List<string>> PathBatches(IEnumerable<ChangeItem> rows)

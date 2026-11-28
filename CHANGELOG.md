@@ -4,8 +4,12 @@
 
 ### Added
 
-- Folder rows in Changes, above the files in each folder. Ticking a folder ticks or unticks every file under it; a folder shows – when only some of its files are ticked, and follows ticks made on its files. A folder's `.meta` is part of its row. Selecting a folder previews nothing and says how many files it holds. Right-click a folder to revert everything in it, or to show it in Explorer or the Project window.
+- Folder rows in Changes, above the files in each folder. Ticking a folder ticks or unticks every file under it; a folder shows – when only some of its files are ticked, and follows ticks made on its files. A folder's `.meta` is part of its row, and ticking any file under the folder ticks it too. Selecting a folder previews nothing and says how many files it holds. Right-click a folder to revert everything in it, or to show it in Explorer or the Project window.
 - A **Show folders** button at the right of the Changes header hides folder rows, giving back the plain list. The choice is remembered.
+
+### Changed
+
+- Revert also removes the folders it leaves empty, unless a `.meta` for the folder is still there. A reverted new folder no longer comes back with a new `.meta`.
 
 ## [1.4.0] - 2026-11-23
 
