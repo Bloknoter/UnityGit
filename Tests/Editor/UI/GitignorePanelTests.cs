@@ -411,5 +411,60 @@ namespace UnityGit.Tests
             Assert.That(GitignorePanel.HasDraft(s.ProjectPath), Is.False);
             Assert.That(Disk(repo), Is.EqualTo(Original));
         }
+
+        // ---- Blocks edits and Undo ----
+
+        [Test]
+        public async Task Panel_RemoveBlock_SavesAndUndoRestores()
+        {
+            var (repo, s) = await RepoAsync();
+            var p = await PanelAsync(s);
+
+            p.RemoveBlock(1);
+
+            Assert.That(Disk(repo), Is.EqualTo("# a\n\n\n# b\ny\n"));
+            Assert.That(p.CanUndo, Is.True);
+            p.Undo();
+            Assert.That(Disk(repo), Is.EqualTo(Original));
+            Assert.That(p.CanUndo, Is.False);
+        }
+
+        [Test]
+        public async Task Panel_MoveBlock_SamePlace_NoUndoEntry()
+        {
+            var (repo, s) = await RepoAsync();
+            var p = await PanelAsync(s);
+
+            p.MoveBlock(1, 1);
+
+            Assert.That(p.CanUndo, Is.False);
+            Assert.That(Disk(repo), Is.EqualTo(Original));
+        }
+
+        [Test]
+        public async Task Panel_MoveBlock_SavesAndShowsBlocks()
+        {
+            var (repo, s) = await RepoAsync();
+            var p = await PanelAsync(s);
+
+            p.MoveBlock(3, 0);
+
+            Assert.That(Disk(repo), Is.EqualTo("y\n\n# a\nx\n# b\n"));
+            Assert.That(p.BlocksView.BlockElements.Count, Is.EqualTo(4));
+            Assert.That(IsDisplayed(p.BlocksView), Is.True, "Blocks mode shows the blocks");
+            Assert.That(IsDisplayed(p.PlainView), Is.False);
+        }
+
+        [Test]
+        public async Task Panel_TypingClearsUndo()
+        {
+            var (_, s) = await RepoAsync();
+            var p = await PanelAsync(s);
+            p.RemoveBlock(1);
+
+            p.SetPlainText("z\n");
+
+            Assert.That(p.CanUndo, Is.False);
+        }
     }
 }

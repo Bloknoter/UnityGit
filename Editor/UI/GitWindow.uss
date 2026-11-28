@@ -1052,3 +1052,82 @@
     padding-top: 0;
     padding-bottom: 0;
 }
+
+/* Blocks: rows like the diff view's (number, then the text as typed); a comment block on a flat tinted rectangle, a code
+   block on the body's own background. Each block has a × at its top right; a drag shows a line where it would drop. */
+
+.unitygit-gitignore-blocks {
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+.unitygit-gitignore-row {
+    flex-direction: row;
+    align-items: flex-start;
+    flex-shrink: 0;
+    min-height: 15px;
+}
+
+.unitygit-window .unitygit-gitignore-row > .unitygit-conflict-code {
+    flex-grow: 1;
+    flex-shrink: 1;
+}
+
+.unitygit-gitignore-block {
+    flex-shrink: 0;
+    padding-top: 1px;
+    padding-bottom: 1px;
+    padding-right: 22px;
+}
+
+.unitygit-gitignore-block--comment {
+    background-color: var(--ed-neutral-tint);
+    border-radius: 0;
+}
+
+.unitygit-window .unitygit-gitignore-block--comment .unitygit-gitignore-text {
+    color: var(--ed-text-muted);
+}
+
+.unitygit-gitignore-block--movable {
+    cursor: move-arrow;
+}
+
+.unitygit-gitignore-block--dragging {
+    opacity: 0.5;
+}
+
+.unitygit-window .unity-button.unitygit-gitignore-remove {
+    position: absolute;
+    top: 1px;
+    right: 2px;
+    width: 18px;
+    height: 16px;
+    margin-left: 0;
+    margin-right: 0;
+    margin-top: 0;
+    margin-bottom: 0;
+    padding-left: 0;
+    padding-right: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-width: 0;
+    background-color: rgba(0, 0, 0, 0);
+    color: var(--ed-text-faint);
+    font-size: var(--ed-font-m);
+    cursor: arrow;
+}
+
+.unitygit-window .unity-button.unitygit-gitignore-remove:hover {
+    color: var(--ed-error-text);
+    background-color: var(--ed-surface-hover);
+}
+
+.unitygit-gitignore-drop-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 2px;
+    margin-top: -1px;
+    background-color: var(--ed-accent);
+}

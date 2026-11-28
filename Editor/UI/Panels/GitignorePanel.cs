@@ -36,8 +36,13 @@ namespace UnityGit.UI
         readonly string _project;
         readonly DropdownField _files;
         readonly ToggleButtonGroup _modeGroup;
+        readonly Button _undo;
         readonly Toggle _autoSaveToggle;
         readonly Button _save;
+        readonly List<string> _undoStack = new List<string>(); // the texts before each ×, drop and Add rule
+        const int UndoLimit = 50;
+        string? _blocksText;     // what the Blocks view shows, rebuilt only when the text changed
+        bool? _blocksReadOnly;
         readonly VisualElement _message;
         readonly Button _createTemplate;
         readonly Button _createEmpty;
@@ -86,6 +91,7 @@ namespace UnityGit.UI
             _modeGroup.Add(new Button { text = GitignoreText.Blocks });
             _modeGroup.Add(new Button { text = GitignoreText.PlainText });
             _modeGroup.RegisterValueChangedCallback(e => Mode = e.newValue[(int)GitignoreMode.PlainText] ? GitignoreMode.PlainText : GitignoreMode.Blocks);
+            _undo = new Button(Undo) { name = UiNames.GitignoreUndo, text = GitignoreText.Undo };
             _autoSaveToggle = new Toggle(GitignoreText.AutoSave) { name = UiNames.GitignoreAutoSave };
             _autoSaveToggle.AddToClassList("unitygit-gitignore-auto-save");
             _autoSaveToggle.RegisterValueChangedCallback(e => AutoSave = e.newValue);
@@ -93,6 +99,7 @@ namespace UnityGit.UI
             _save.AddToClassList(EditorUiClasses.ButtonPrimary);
             toolbar.Add(_files);
             toolbar.Add(_modeGroup);
+            toolbar.Add(_undo);
             toolbar.Add(EditorUiElements.ToolbarSpacer());
             toolbar.Add(_autoSaveToggle);
             toolbar.Add(_save);
@@ -119,6 +126,10 @@ namespace UnityGit.UI
             PlainView = new GitignorePlainView();
             PlainView.Edited += SetPlainText;
             PlainView.Field.RegisterCallback<FocusOutEvent>(_ => FlushPendingSave());
+            BlocksView = new GitignoreBlocksView();
+            BlocksView.RemoveRequested += RemoveBlock;
+            BlocksView.MoveRequested += MoveBlock;
+            _body.Add(BlocksView);
             _body.Add(PlainView);
             Add(_body);
 
@@ -148,6 +159,10 @@ namespace UnityGit.UI
         internal string? NoteText => _noteText;
 
         internal GitignorePlainView PlainView { get; }
+
+        internal GitignoreBlocksView BlocksView { get; }
+
+        internal bool CanUndo => _undoStack.Count > 0 && !IsReadOnly;
 
         internal GitignoreMode Mode
         {
@@ -195,6 +210,7 @@ namespace UnityGit.UI
         internal void SetPlainText(string text)
         {
             if (IsReadOnly || text == _text) return;
+            _undoStack.Clear(); // Undo steps back through block edits only; typing has the text box's own
             SetText(text);
             if (!AutoSave) return;
             _pendingSave ??= schedule.Execute(FlushPendingSave);
@@ -205,7 +221,32 @@ namespace UnityGit.UI
         internal void ReplaceText(string text, bool undoable)
         {
             if (IsReadOnly || text == _text) return;
+            if (undoable)
+            {
+                _undoStack.Add(_text);
+                if (_undoStack.Count > UndoLimit) _undoStack.RemoveAt(0);
+            }
             SetText(text);
+            if (AutoSave) FlushPendingSave();
+        }
+
+        /// <summary>The × of a block: its lines go (spec "Edits").</summary>
+        internal void RemoveBlock(int block) => ReplaceText(GitignoreDocument.Parse(_text).Remove(block).ToText(), undoable: true);
+
+        /// <summary>A block dropped at a position between blocks; nothing happens when it wouldn't move.</summary>
+        internal void MoveBlock(int block, int position)
+        {
+            var moved = GitignoreDocument.Parse(_text).Move(block, position);
+            if (moved != null) ReplaceText(moved.ToText(), undoable: true);
+        }
+
+        /// <summary>Puts back the text from before the last ×, drop or Add rule, and saves it when auto-save is on.</summary>
+        internal void Undo()
+        {
+            if (!CanUndo) return;
+            var previous = _undoStack[_undoStack.Count - 1];
+            _undoStack.RemoveAt(_undoStack.Count - 1);
+            SetText(previous);
             if (AutoSave) FlushPendingSave();
         }
 
@@ -448,6 +489,7 @@ namespace UnityGit.UI
             _diskVersion = null;
             _saveError = null;
             _pendingSave?.Pause();
+            _undoStack.Clear(); // a reload, a file switch or another file read
             EraseDraft();
             NotifyUnsaved();
         }
@@ -548,13 +590,25 @@ namespace UnityGit.UI
             PanelParts.SetDisplayed(_createEmpty, create);
             PanelParts.SetDisplayed(_reload, reload);
 
+            _undo.SetEnabled(CanUndo);
             PanelParts.SetDisplayed(_body, _fullPath != null);
-            var readOnly = IsReadOnly || Mode == GitignoreMode.Blocks;
+            var blocks = Mode == GitignoreMode.Blocks;
+            PanelParts.SetDisplayed(BlocksView, blocks);
+            PanelParts.SetDisplayed(PlainView, !blocks);
+            var readOnly = IsReadOnly;
+            // The text box follows every change (cheap, and its line numbers are read in either mode); the blocks are
+            // rebuilt only while shown and only when the text changed, so a drag in progress survives other renders.
             if (_shownText != _text || _shownReadOnly != readOnly)
             {
                 PlainView.Show(_text, readOnly);
                 _shownText = _text;
                 _shownReadOnly = readOnly;
+            }
+            if (blocks && (_blocksText != _text || _blocksReadOnly != readOnly))
+            {
+                BlocksView.Show(GitignoreDocument.Parse(_text), readOnly);
+                _blocksText = _text;
+                _blocksReadOnly = readOnly;
             }
         }
     }
