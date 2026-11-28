@@ -1,9 +1,11 @@
 #nullable enable
+using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using FlexGit;
 using NUnit.Framework;
 using UnityEditor;
+using UnityEditor.UIElements;
 using UnityEngine.UIElements;
 using UnityGit.UI;
 
@@ -262,6 +264,102 @@ namespace UnityGit.Tests
 
             Assert.That(o.Succeeded, Is.True, o.Message);
             Assert.That(await HeadFiles(repo), Is.EquivalentTo(new[] { "top.txt" }));
+        }
+
+        [Test] public async Task HideFolders_ListIsTodaysList_ChoiceSaved()
+        {
+            var (_, s) = await SessionWithFilesAsync(Files);
+            var p = Panel(s);
+
+            p.ShowFolders = false;
+
+            Assert.That(p.Entries, Is.EqualTo(AllRows));
+            Assert.That(EditorPrefs.GetBool(ChangesPanel.ShowFoldersPref, true), Is.False);
+            Assert.That(new ChangesPanel(s).Entries, Is.EqualTo(AllRows), "a new panel reads the choice");
+        }
+
+        [Test] public async Task HeaderToggle_HidesAndShowsFolders()
+        {
+            var p = Panel((await SessionWithFilesAsync(Files)).s);
+            using (UnityGitTestWindow.Open(p))
+            {
+                var toggle = p.Q<ToolbarToggle>(UiNames.ChangesShowFolders);
+                Assert.That((toggle.value, toggle.tooltip), Is.EqualTo((true, "Show folders")));
+                Assert.That(toggle.Q<Image>(className: "unitygit-folder-icon").image, Is.Not.Null);
+
+                toggle.value = false;
+
+                Assert.That(p.Entries, Is.EqualTo(AllRows));
+
+                toggle.value = true;
+
+                Assert.That(p.Entries, Does.Contain(A));
+            }
+        }
+
+        [Test] public async Task HideFolders_KeepsSelectedFiles_DropsFolders()
+        {
+            var p = Panel((await SessionWithFilesAsync(Files)).s);
+            p.Select(new[] { A, "top.txt" });
+
+            p.ShowFolders = false;
+
+            Assert.That(p.SelectedRows, Is.EqualTo(new[] { "top.txt" }));
+            Assert.That(p.Q<ListView>(UiNames.ChangesList).selectedIndices, Is.EqualTo(new[] { 3 }));
+        }
+
+        [Test] public async Task HideFolders_FolderMetaKeepsItsTick()
+        {
+            var p = Panel((await SessionWithFilesAsync(Files)).s);
+            p.SetTicked(A, false);
+
+            p.ShowFolders = false;
+
+            Assert.That(p.IsTicked("Assets/A.meta"), Is.False);
+            Assert.That(Ticked(p), Is.EqualTo(new[] { "top.txt" }));
+        }
+
+        [Test] public async Task Preview_OneFolderSelected_CountsItsFiles()
+        {
+            var p = Panel((await SessionWithFilesAsync(Files)).s);
+
+            p.Select(new[] { A });
+            Assert.That(p.Preview.NoteText, Is.EqualTo("3 files in this folder — select one to preview"));
+
+            p.Select(new[] { AB });
+            Assert.That(p.Preview.NoteText, Is.EqualTo("1 file in this folder — select it to preview"));
+
+            p.Select(new[] { A, "top.txt" });
+            Assert.That(p.Preview.NoteText, Is.EqualTo("2 files selected"));
+        }
+
+        [Test] public async Task MenuOnFolder_TargetsItsFiles_OpensTheFolder()
+        {
+            var (repo, s) = await SessionWithFilesAsync(Files);
+            var p = Panel(s);
+
+            var st = p.GetRowMenuState(A);
+
+            Assert.That(st.Targets, Is.EqualTo(new[] { "Assets/A.meta", "Assets/A/B/y.txt", "Assets/A/x.txt" }));
+            Assert.That(st.RevertDisabledReason, Is.Null);
+            Assert.That(st.ExplorerPath, Is.SamePath(Path.Combine(repo.WorkingDirectory, "Assets", "A")));
+
+            p.Select(new[] { A, "Assets/A/x.txt" });
+
+            Assert.That(p.GetRowMenuState(A).Targets, Is.EqualTo(new[] { "Assets/A.meta", "Assets/A/B/y.txt", "Assets/A/x.txt" }), "each file once");
+        }
+
+        [Test] public async Task MenuOnDeletedFolder_ExplorerDisabled()
+        {
+            var repo = await _sb.InitRepoAsync("p");
+            await GitSandbox.CommitFileAsync(repo, "Gone/f.txt", "f\n", "initial");
+            Directory.Delete(Path.Combine(repo.WorkingDirectory, "Gone"), true);
+            var s = _sb.CreateSession(repo.WorkingDirectory, new FakeEditorHooks());
+            await s.RefreshAsync();
+            var p = Panel(s);
+
+            Assert.That(p.GetRowMenuState("Gone/").ExplorerPath, Is.Null);
+            Assert.That(p.GetRowMenuState("Gone/").Targets, Is.EqualTo(new[] { "Gone/f.txt" }));
         }
     }
 }

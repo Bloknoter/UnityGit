@@ -408,6 +408,17 @@
     -unity-text-align: middle-right;
 }
 
+/* The header's Show folders button, after the summary. */
+.unitygit-window .unitygit-changes-show-folders {
+    flex-shrink: 0;
+    margin-left: var(--ed-space-2);
+}
+
+.unitygit-changes-show-folders .unitygit-folder-icon {
+    width: 16px;
+    height: 16px;
+}
+
 /* Changes and Conflicts: the file list on the left and the selected file on the right, a divider between them to drag
    (PanelParts.SideBySide; PanelParts.SplitListWidth is the list's start width). The split view sets the panes' width and
    flex inline; these rules give the panes a floor and a gap. In Changes the left pane is a column of the list and the commit

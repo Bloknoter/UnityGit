@@ -18,6 +18,11 @@ namespace UnityGit.UI
 
         public static string Selected(int n) => $"{PanelParts.Count(n)} files selected";
 
+        /// <summary>One folder row selected: how many file rows it ticks.</summary>
+        public static string Folder(int n) => n == 1
+            ? "1 file in this folder — select it to preview"
+            : $"{PanelParts.Count(n)} files in this folder — select one to preview";
+
         /// <summary>"512 B", "12.3 KB", "1.2 MB", "3.4 GB" (1024-based).</summary>
         public static string Size(long bytes)
         {

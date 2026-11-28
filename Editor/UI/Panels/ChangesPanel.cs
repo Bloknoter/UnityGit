@@ -23,6 +23,7 @@ namespace UnityGit.UI
         readonly ListView _list;
         readonly Toggle _tickAll;
         readonly Label _summary;
+        readonly UnityEditor.UIElements.ToolbarToggle _showFoldersToggle;
         readonly TextField _message;
         readonly Button _submit;
         // The typed message is kept in SessionState, so it survives domain reloads (a script change, entering Play Mode).
@@ -74,6 +75,16 @@ namespace UnityGit.UI
             _summary = PanelParts.Text(null, EditorUiClasses.TableHeaderCell, "unitygit-changes-summary");
             _summary.name = UiNames.ChangesSummary;
             header.Add(_summary);
+
+            // Shows or hides the folder rows; off gives the plain list of file rows.
+            _showFoldersToggle = new UnityEditor.UIElements.ToolbarToggle { name = UiNames.ChangesShowFolders, tooltip = "Show folders" };
+            _showFoldersToggle.AddToClassList("unitygit-changes-show-folders");
+            var folderIcon = new Image { image = GitIcons.LoadFolder(), scaleMode = ScaleMode.ScaleToFit, pickingMode = PickingMode.Ignore };
+            folderIcon.AddToClassList(GitIcons.FolderIconClass);
+            (_showFoldersToggle.Q(className: Toggle.inputUssClassName) ?? _showFoldersToggle).Add(folderIcon);
+            _showFoldersToggle.SetValueWithoutNotify(_showFolders);
+            _showFoldersToggle.RegisterValueChangedCallback(e => ShowFolders = e.newValue);
+            header.Add(_showFoldersToggle);
 
             _list = new ListView
             {
@@ -132,6 +143,25 @@ namespace UnityGit.UI
 
         /// <summary>Paths of the file rows currently listed. Folder rows aren't rows of their own: they tick these.</summary>
         internal IReadOnlyList<string> Rows => _rows;
+
+        /// <summary>
+        /// Whether folder rows are listed (the header's folder button). Saved per user. Turning it off keeps the selected files
+        /// selected and drops selected folders.
+        /// </summary>
+        internal bool ShowFolders
+        {
+            get => _showFolders;
+            set
+            {
+                if (value == _showFolders) return;
+                _showFolders = value;
+                UnityEditor.EditorPrefs.SetBool(ShowFoldersPref, value);
+                _showFoldersToggle.SetValueWithoutNotify(value);
+                RebuildEntries();
+                RefreshRows();
+                UpdatePreview();
+            }
+        }
 
         /// <summary>Keys of the list's lines in list order: file paths, and folder paths with a trailing '/' when folders are shown.</summary>
         internal IReadOnlyList<string> Entries => _entries.Select(e => e.Key).ToList();
@@ -275,17 +305,19 @@ namespace UnityGit.UI
         /// </summary>
         internal RowMenuState GetRowMenuState(string rowPath)
         {
-            IReadOnlyList<string> targets = ExpandToFiles(_selected.Contains(rowPath) ? SelectedRows : new[] { rowPath });
+            IReadOnlyList<string> picked = _selected.Contains(rowPath) ? SelectedRows : new[] { rowPath };
+            IReadOnlyList<string> targets = ExpandToFiles(picked);
 
             var reason = _session.GetAvailability(GitAction.Revert).Reason;
             if (reason == null && targets.All(t => _byPath.TryGetValue(t, out var row) && row.IsConflicted))
                 reason = RevertText.AllConflicted;
 
+            // The first picked line: a folder opens or pings the folder itself.
             string? explorerPath = null;
             var root = _session.Snapshot.RepoRoot;
             if (root != null)
             {
-                var full = Path.GetFullPath(Path.Combine(root, targets[0]));
+                var full = Path.GetFullPath(Path.Combine(root, picked[0].TrimEnd('/')));
                 if (File.Exists(full) || Directory.Exists(full)) explorerPath = full;
             }
             var assetPath = explorerPath != null ? AssetPaths.FromFullPath(explorerPath) : null;
@@ -468,7 +500,7 @@ namespace UnityGit.UI
             string? note = null;
             if (selected.Count == 0) note = PreviewText.SelectFile;
             else if (selected.Count > 1) note = PreviewText.Selected(selected.Count);
-            else if (_entryByKey[selected[0]].IsFolder) note = PreviewText.Selected(_entryByKey[selected[0]].Files.Count);
+            else if (_entryByKey[selected[0]].IsFolder) note = PreviewText.Folder(_entryByKey[selected[0]].Files.Count);
             else if (_byPath[selected[0]].IsConflicted) note = PreviewText.Conflicted;
             if (note != null)
             {
